@@ -1,0 +1,22 @@
+@startuml
+skinparam linetype ortho
+skinparam Monochrome true
+
+class Process{
+    String id
+}
+
+class View{
+    int id
+}
+
+View o-- "many" Process
+
+class ProcessGroup{
+    String name
+}
+
+ProcessGroup -- View
+ProcessGroup "many" -- "many" Process
+
+@enduml
