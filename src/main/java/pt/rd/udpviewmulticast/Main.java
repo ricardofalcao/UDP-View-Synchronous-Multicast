@@ -1,5 +1,7 @@
 package pt.rd.udpviewmulticast;
 
+import pt.rd.udpviewmulticast.benchmark.NetworkDegrader;
+
 import java.io.IOException;
 import java.net.InetAddress;
 import java.net.UnknownHostException;
@@ -42,12 +44,48 @@ public class Main {
 
                         try {
 
+                            long start = System.currentTimeMillis();
+
                             System.out.print("pinging... ");
                             boolean reachable = InetAddress.getByName(args[0]).isReachable(5000);
-                            System.out.println(reachable ? "success" : "failed");
+                            System.out.println(reachable ? String.format("success (%d ms)", System.currentTimeMillis() - start) : "failed");
 
                         } catch (IOException e) {
                             e.printStackTrace();
+                        }
+
+                        break;
+                    }
+
+                    case "net": {
+                        if (args.length < 1) {
+                            System.out.println("Use 'net <rule>.'");
+                            break;
+                        }
+
+                        try {
+                            String rule = String.join(" ", args).trim();
+
+                            if (rule.equalsIgnoreCase("clear")) {
+
+                                int result = NetworkDegrader.clearRules("eth0");
+                                if (result == 0) {
+                                    System.out.println("Cleared");
+                                } else {
+                                    System.out.println(String.format("An error occurred: %d", result));
+                                }
+
+                                break;
+                            }
+
+                            int result = NetworkDegrader.addRule("eth0", rule);
+                            if (result == 0) {
+                                System.out.println("Applied");
+                            } else {
+                                System.out.println(String.format("An error occurred: %d", result));
+                            }
+                        } catch(InterruptedException | IOException ex) {
+                            ex.printStackTrace();
                         }
 
                         break;
