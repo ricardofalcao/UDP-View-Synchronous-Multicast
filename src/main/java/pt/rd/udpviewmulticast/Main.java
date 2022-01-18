@@ -1,7 +1,9 @@
 package pt.rd.udpviewmulticast;
 
 import pt.rd.udpviewmulticast.communication.Channel;
+import pt.rd.udpviewmulticast.communication.channels.ReliableChannel;
 import pt.rd.udpviewmulticast.communication.channels.UnreliableChannel;
+import pt.rd.udpviewmulticast.communication.packets.PacketAck;
 import pt.rd.udpviewmulticast.communication.packets.PacketHello;
 import pt.rd.udpviewmulticast.communication.packets.PacketRegistry;
 import pt.rd.udpviewmulticast.structures.View;
@@ -14,6 +16,7 @@ import java.util.*;
 public class Main {
 
     public static void main(String[] _args) throws UnknownHostException {
+        PacketRegistry.registerPacket((byte) 99, PacketAck.class);
         PacketRegistry.registerPacket((byte) 1, PacketHello.class);
 
         UUID id = UUID.randomUUID();
@@ -25,7 +28,7 @@ public class Main {
                 InetAddress.getByName("230.0.0.0")
         );
 
-        Channel channel = new UnreliableChannel();
+        Channel channel = new ReliableChannel();
         Thread thread = new Thread(() -> {
             channel.open(basicView);
             channel.listenForPackets();
