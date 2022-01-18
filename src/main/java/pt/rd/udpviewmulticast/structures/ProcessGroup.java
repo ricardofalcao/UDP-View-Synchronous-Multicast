@@ -1,5 +1,7 @@
 package pt.rd.udpviewmulticast.structures;
 
+import java.net.InetAddress;
+import java.net.UnknownHostException;
 import java.util.Collections;
 
 public class ProcessGroup {
@@ -12,9 +14,9 @@ public class ProcessGroup {
 
      */
 
-    public ProcessGroup(String name) {
+    public ProcessGroup(String name) throws UnknownHostException {
         this.name = name;
-        this.activeView = new View(0, this, Collections.emptyList());
+        this.activeView = new View(0, this, Collections.emptyList(), InetAddress.getByName("230.0.0.0"));
     }
 
     /*

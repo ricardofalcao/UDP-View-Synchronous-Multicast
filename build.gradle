@@ -14,6 +14,14 @@ dependencies {
     testRuntimeOnly 'org.junit.jupiter:junit-jupiter-engine:5.7.2'
 }
 
+jar {
+    archiveFileName = 'App.jar'
+
+    manifest {
+        attributes 'Main-Class': 'pt.rd.udpviewmulticast.Main'
+    }
+}
+
 test {
     useJUnitPlatform()
 }

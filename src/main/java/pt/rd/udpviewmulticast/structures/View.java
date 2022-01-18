@@ -1,9 +1,8 @@
 package pt.rd.udpviewmulticast.structures;
 
-import java.time.LocalDateTime;
+import java.net.InetAddress;
 import java.util.Collection;
 import java.util.Collections;
-import java.util.HashSet;
 import java.util.Set;
 
 public class View {
@@ -13,15 +12,18 @@ public class View {
     private final ProcessGroup group;
 
     private final Collection<Process> members;
+    
+    private final InetAddress subnetAddress;
 
     /*
 
      */
 
-    public View(int id, ProcessGroup group, Collection<Process> members) {
+    public View(int id, ProcessGroup group, Collection<Process> members, InetAddress subnetAddress) {
         this.id = id;
         this.group = group;
         this.members = Collections.unmodifiableCollection(members);
+        this.subnetAddress = subnetAddress;
     }
 
     /*
@@ -34,6 +36,10 @@ public class View {
 
     public Collection<Process> getMembers() {
         return members;
+    }
+
+    public InetAddress getSubnetAddress() {
+        return subnetAddress;
     }
 
     /*
@@ -54,14 +60,14 @@ public class View {
         Collection<Process> newProcesses = Set.copyOf(members);
         newProcesses.add(process);
 
-        return new View(this.id + 1, this.group, newProcesses);
+        return new View(this.id + 1, this.group, newProcesses, subnetAddress);
     }
 
     public View removeMember(Process process) {
         Collection<Process> newProcesses = Set.copyOf(members);
         newProcesses.remove(process);
 
-        return new View(this.id + 1, this.group, newProcesses);
+        return new View(this.id + 1, this.group, newProcesses, subnetAddress);
     }
 
     /*
