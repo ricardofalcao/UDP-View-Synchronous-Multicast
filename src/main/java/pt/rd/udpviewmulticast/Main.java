@@ -1,5 +1,11 @@
 package pt.rd.udpviewmulticast;
 
+import pt.rd.udpviewmulticast.communication.Channel;
+import pt.rd.udpviewmulticast.communication.channels.UnreliableChannel;
+import pt.rd.udpviewmulticast.communication.packets.PacketHello;
+import pt.rd.udpviewmulticast.communication.packets.PacketRegistry;
+import pt.rd.udpviewmulticast.structures.View;
+
 import java.io.IOException;
 import java.net.InetAddress;
 import java.net.UnknownHostException;
@@ -7,8 +13,25 @@ import java.util.*;
 
 public class Main {
 
-    public static void main(String[] _args) {
+    public static void main(String[] _args) throws UnknownHostException {
+        PacketRegistry.registerPacket((byte) 1, PacketHello.class);
+
         UUID id = UUID.randomUUID();
+
+        View basicView = new View(
+                10,
+                null,
+                new ArrayList<>(),
+                InetAddress.getByName("230.0.0.0")
+        );
+
+        Channel channel = new UnreliableChannel();
+        Thread thread = new Thread(() -> {
+            channel.open(basicView);
+            channel.listenForPackets();
+        });
+
+        thread.start();
 
         try (Scanner scanner = new Scanner(System.in)) {
             System.out.print("> ");
@@ -52,6 +75,23 @@ public class Main {
 
                         break;
                     }
+
+                    case "hello": {
+                        if (args.length < 1) {
+                            System.out.println("Use 'hello <NUM>.'");
+                            break;
+                        }
+
+                        try {
+                            int num = Integer.parseInt(args[0]);
+                            PacketHello packet = new PacketHello(num, "Hello World!");
+                            channel.send(packet);
+                        } catch(NumberFormatException ex) {
+                            System.out.println("Invalid number");
+                        }
+
+                        break;
+                    }
                 }
 
                 System.out.print("> ");
@@ -60,6 +100,8 @@ public class Main {
         } catch(NoSuchElementException ignored) {
             System.out.println("goodbye");
         }
+
+        channel.close();
     }
 
 }
