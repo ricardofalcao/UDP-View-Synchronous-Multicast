@@ -97,11 +97,12 @@ public class ReliableChannel implements Channel {
                     }
 
                     this.receive(sourceAddress, packet);
-                } catch(NoSuchMethodException | InstantiationException | IllegalAccessException | InvocationTargetException ex) {
+                } catch (NoSuchMethodException | InstantiationException | IllegalAccessException | InvocationTargetException ex) {
                     ex.printStackTrace();
                 }
 
-            } catch(IOException ex) {
+            } catch (SocketException ignored) {
+            } catch (IOException ex) {
                 ex.printStackTrace();
             }
 
@@ -110,7 +111,7 @@ public class ReliableChannel implements Channel {
 
     @Override
     public void close() {
-    if (this.socket != null) {
+        if (this.socket != null) {
             this.running = false;
             this.socket.close();
         }
@@ -176,7 +177,7 @@ public class ReliableChannel implements Channel {
             }
 
             System.out.println(String.format("Sent packet '%s': %s", packet.getClass().getSimpleName(), packet.toString()));
-        } catch(IOException ex) {
+        } catch (IOException ex) {
             ex.printStackTrace();
         }
     }
@@ -184,7 +185,6 @@ public class ReliableChannel implements Channel {
     @Override
     public void receive(InetSocketAddress source, Packet packet) {
         System.out.println(String.format("Received packet '%s' from '%s:%d': %s.", packet.getClass().getSimpleName(), source.getHostString(), source.getPort(), packet.toString()));
-
 
 
     }

@@ -1,30 +1,46 @@
 package pt.rd.udpviewmulticast;
 
-import org.jline.reader.EndOfFileException;
-import org.jline.reader.LineReader;
-import org.jline.reader.LineReaderBuilder;
-import org.jline.reader.UserInterruptException;
-import pt.rd.udpviewmulticast.benchmark.NetworkDegrader;
+import org.fusesource.jansi.AnsiConsole;
+import org.jline.console.SystemRegistry;
+import org.jline.console.impl.Builtins;
+import org.jline.console.impl.SystemRegistryImpl;
+import org.jline.reader.*;
+import org.jline.reader.impl.DefaultParser;
+import org.jline.terminal.Terminal;
+import org.jline.terminal.TerminalBuilder;
+import picocli.CommandLine;
+import picocli.shell.jline3.PicocliCommands;
 import pt.rd.udpviewmulticast.communication.Channel;
 import pt.rd.udpviewmulticast.communication.channels.ReliableChannel;
-import pt.rd.udpviewmulticast.communication.channels.UnreliableChannel;
 import pt.rd.udpviewmulticast.communication.packets.PacketAck;
 import pt.rd.udpviewmulticast.communication.packets.PacketHello;
 import pt.rd.udpviewmulticast.communication.packets.PacketRegistry;
+import pt.rd.udpviewmulticast.shell.ShellCommands;
 import pt.rd.udpviewmulticast.structures.View;
 
-import java.io.IOException;
 import java.net.InetAddress;
 import java.net.UnknownHostException;
-import java.util.*;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.util.ArrayList;
+import java.util.UUID;
+import java.util.function.Supplier;
 
 public class Main {
+
+    public static UUID ID;
+
+    public static Channel CHANNEL;
+
+    /*
+
+     */
 
     public static void main(String[] _args) throws UnknownHostException {
         PacketRegistry.registerPacket((byte) 99, PacketAck.class);
         PacketRegistry.registerPacket((byte) 1, PacketHello.class);
 
-        UUID id = UUID.randomUUID();
+        ID = UUID.randomUUID();
 
         View basicView = new View(
                 10,
@@ -33,117 +49,90 @@ public class Main {
                 InetAddress.getByName("230.0.0.0")
         );
 
-        Channel channel = new ReliableChannel();
+        CHANNEL = new ReliableChannel();
         Thread thread = new Thread(() -> {
-            channel.open(basicView);
-            channel.listenForPackets();
+            CHANNEL.open(basicView);
+            CHANNEL.listenForPackets();
         });
 
         thread.start();
 
-        LineReader reader = LineReaderBuilder.builder().build();
+        createShell();
+
+        CHANNEL.close();
+    }
+
+    /*
+
+     */
+
+    private static void createShell() {
+        AnsiConsole.systemInstall();
         try {
-            while (true) {
-                String line = reader.readLine("> ");
+            Supplier<Path> workDir = () -> Paths.get(System.getProperty("user.dir"));
 
-                String[] split = line.split(" ");
-                String[] args = Arrays.copyOfRange(split, 1, split.length);
+            // set up JLine built-in commands
+            Builtins builtins = new Builtins(workDir, null, null);
+            builtins.rename(Builtins.Command.TTOP, "top");
+            builtins.alias("zle", "widget");
+            builtins.alias("bindkey", "keymap");
 
-                switch (split[0].toLowerCase()) {
-                    case "id": {
-                        System.out.println(id.toString());
-                        break;
-                    }
+            // set up picocli commands
+            ShellCommands commands = new ShellCommands();
 
-                    case "ip": {
-                        try {
-                            System.out.println(InetAddress.getLocalHost().getHostAddress());
-                        } catch (UnknownHostException e) {
-                            e.printStackTrace();
-                        }
+            PicocliCommands.PicocliCommandsFactory factory = new PicocliCommands.PicocliCommandsFactory();
+            // Or, if you have your own factory, you can chain them like this:
+            // MyCustomFactory customFactory = createCustomFactory(); // your application custom factory
+            // PicocliCommandsFactory factory = new PicocliCommandsFactory(customFactory); // chain the factories
 
-                        break;
-                    }
+            CommandLine cmd = new CommandLine(commands, factory);
+            PicocliCommands picocliCommands = new PicocliCommands(cmd);
 
-                    case "ping": {
-                        if (args.length < 1) {
-                            System.out.println("Use 'ping <host>.'");
-                            break;
-                        }
+            Parser parser = new DefaultParser();
+            try (Terminal terminal = TerminalBuilder.builder().build()) {
+                SystemRegistry systemRegistry = new SystemRegistryImpl(parser, terminal, workDir, null);
+                systemRegistry.setCommandRegistries(builtins, picocliCommands);
+                systemRegistry.register("help", picocliCommands);
 
-                        try {
+                LineReader reader = LineReaderBuilder.builder()
+                        .terminal(terminal)
+                        .completer(systemRegistry.completer())
+                        .parser(parser)
+                        .variable(LineReader.LIST_MAX, 50)   // max tab completion candidates
+                        .build();
 
-                            long start = System.currentTimeMillis();
+                builtins.setLineReader(reader);
+                factory.setTerminal(terminal);
 
-                            System.out.print("pinging... ");
-                            boolean reachable = InetAddress.getByName(args[0]).isReachable(5000);
-                            System.out.println(reachable ? String.format("success (%d ms)", System.currentTimeMillis() - start) : "failed");
+                /*TailTipWidgets widgets = new TailTipWidgets(reader, systemRegistry::commandDescription, 5, TailTipWidgets.TipType.COMPLETER);
+                widgets.enable();
+                KeyMap<Binding> keyMap = reader.getKeyMaps().get("main");
+                keyMap.bind(new Reference("tailtip-toggle"), KeyMap.alt("s"));*/
 
-                        } catch (IOException e) {
-                            e.printStackTrace();
-                        }
+                String prompt = "> ";
+                String rightPrompt = null;
 
-                        break;
-                    }
-                    case "hello": {
-                        if (args.length < 1) {
-                            System.out.println("Use 'hello <NUM>.'");
-                            break;
-                        }
-
-                        try {
-                            int num = Integer.parseInt(args[0]);
-                            PacketHello packet = new PacketHello(num, "Hello World!");
-                            channel.send(packet);
-                        } catch (NumberFormatException ex) {
-                            System.out.println("Invalid number");
-                        }
-
-                        break;
-                    }
-
-                    case "net": {
-                        if (args.length < 1) {
-                            System.out.println("Use 'net <rule>.'");
-                            break;
-                        }
-
-                        try {
-                            String rule = String.join(" ", args).trim();
-
-                            if (rule.equalsIgnoreCase("clear")) {
-
-                                int result = NetworkDegrader.clearRules("eth0");
-                                if (result == 0) {
-                                    System.out.println("Cleared");
-                                } else {
-                                    System.out.println(String.format("An error occurred: %d", result));
-                                }
-
-                                break;
-                            }
-
-                            int result = NetworkDegrader.addRule("eth0", rule);
-                            if (result == 0) {
-                                System.out.println("Applied");
-                            } else {
-                                System.out.println(String.format("An error occurred: %d", result));
-                            }
-                        } catch (InterruptedException | IOException ex) {
-                            ex.printStackTrace();
-                        }
-
-                        break;
+                // start the shell and process input until the user quits with Ctrl-D
+                String line;
+                while (true) {
+                    try {
+                        systemRegistry.cleanUp();
+                        line = reader.readLine(prompt, rightPrompt, (MaskingCallback) null, null);
+                        systemRegistry.execute(line);
+                    } catch (UserInterruptException e) {
+                        // Ignore
+                    } catch (EndOfFileException e) {
+                        return;
+                    } catch (Exception e) {
+                        systemRegistry.trace(e);
                     }
                 }
             }
-        } catch (UserInterruptException ignored) {
-            // Ignore
-        } catch (EndOfFileException e) {
-
+        } catch (Throwable t) {
+            t.printStackTrace();
+        } finally {
+            AnsiConsole.systemUninstall();
         }
-
-        channel.close();
     }
 
 }

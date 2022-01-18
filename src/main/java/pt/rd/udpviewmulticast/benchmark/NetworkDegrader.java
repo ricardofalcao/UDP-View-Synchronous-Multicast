@@ -7,7 +7,7 @@ public class NetworkDegrader {
 
     private static int _run(String command) throws IOException, InterruptedException {
         ProcessBuilder builder = new ProcessBuilder(String.format("tc qdisc %s", command).split(" "));
-        builder.inheritIO();
+        //builder.inheritIO();
 
         Process process = builder.start();
         process.waitFor(1, TimeUnit.SECONDS);

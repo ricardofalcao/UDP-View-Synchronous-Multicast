@@ -15,7 +15,9 @@ dependencies {
     testImplementation 'org.junit.jupiter:junit-jupiter-api:5.7.2'
     testRuntimeOnly 'org.junit.jupiter:junit-jupiter-engine:5.7.2'
 
-    implementation 'org.jline:jline-reader:3.21.0'
+    implementation 'org.fusesource.jansi:jansi:2.4.0'
+
+    implementation 'info.picocli:picocli-shell-jline3:4.6.2'
 }
 
 jar {
