@@ -2,7 +2,7 @@
 
 SCRIPTPATH="$( cd -- "$(dirname "$0")" >/dev/null 2>&1 ; pwd -P )"
 
-"$SCRIPTPATH"/../gradlew build > /dev/null
+"$SCRIPTPATH"/../gradlew shadowJar > /dev/null
 
 docker network create -d bridge udp-network &> /dev/null
 docker build -t udp-multicast "$SCRIPTPATH"/.. &> /dev/null

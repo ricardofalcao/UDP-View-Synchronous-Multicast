@@ -1,5 +1,9 @@
 package pt.rd.udpviewmulticast;
 
+import org.jline.reader.EndOfFileException;
+import org.jline.reader.LineReader;
+import org.jline.reader.LineReaderBuilder;
+import org.jline.reader.UserInterruptException;
 import pt.rd.udpviewmulticast.benchmark.NetworkDegrader;
 import pt.rd.udpviewmulticast.communication.Channel;
 import pt.rd.udpviewmulticast.communication.channels.UnreliableChannel;
@@ -34,11 +38,11 @@ public class Main {
 
         thread.start();
 
-        try (Scanner scanner = new Scanner(System.in)) {
-            System.out.print("> ");
+        LineReader reader = LineReaderBuilder.builder().build();
+        try {
+            while (true) {
+                String line = reader.readLine("> ");
 
-            String line;
-            while ((line = scanner.nextLine()) != null) {
                 String[] split = line.split(" ");
                 String[] args = Arrays.copyOfRange(split, 1, split.length);
 
@@ -98,42 +102,42 @@ public class Main {
                     case "net": {
                         if (args.length < 1) {
                             System.out.println("Use 'net <rule>.'");
+                            break;
+                        }
 
-                            try {
-                                String rule = String.join(" ", args).trim();
+                        try {
+                            String rule = String.join(" ", args).trim();
 
-                                if (rule.equalsIgnoreCase("clear")) {
+                            if (rule.equalsIgnoreCase("clear")) {
 
-                                    int result = NetworkDegrader.clearRules("eth0");
-                                    if (result == 0) {
-                                        System.out.println("Cleared");
-                                    } else {
-                                        System.out.println(String.format("An error occurred: %d", result));
-                                    }
-
-                                    break;
-                                }
-
-                                int result = NetworkDegrader.addRule("eth0", rule);
+                                int result = NetworkDegrader.clearRules("eth0");
                                 if (result == 0) {
-                                    System.out.println("Applied");
+                                    System.out.println("Cleared");
                                 } else {
                                     System.out.println(String.format("An error occurred: %d", result));
                                 }
-                            } catch (InterruptedException | IOException ex) {
-                                ex.printStackTrace();
+
+                                break;
                             }
 
-                            break;
+                            int result = NetworkDegrader.addRule("eth0", rule);
+                            if (result == 0) {
+                                System.out.println("Applied");
+                            } else {
+                                System.out.println(String.format("An error occurred: %d", result));
+                            }
+                        } catch (InterruptedException | IOException ex) {
+                            ex.printStackTrace();
                         }
+
+                        break;
                     }
                 }
-
-                System.out.print("> ");
-
             }
-        } catch (NoSuchElementException ignored) {
-            System.out.println("goodbye");
+        } catch (UserInterruptException ignored) {
+            // Ignore
+        } catch (EndOfFileException e) {
+
         }
 
         channel.close();
