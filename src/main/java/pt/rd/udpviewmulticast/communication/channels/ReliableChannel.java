@@ -2,21 +2,25 @@ package pt.rd.udpviewmulticast.communication.channels;
 
 import pt.rd.udpviewmulticast.communication.Channel;
 import pt.rd.udpviewmulticast.communication.Packet;
+import pt.rd.udpviewmulticast.communication.packets.PacketAck;
 import pt.rd.udpviewmulticast.communication.packets.PacketRegistry;
+import pt.rd.udpviewmulticast.structures.Process;
 import pt.rd.udpviewmulticast.structures.View;
+import pt.rd.udpviewmulticast.utils.CRC16;
 
 import java.io.*;
 import java.lang.reflect.InvocationTargetException;
-import java.net.DatagramPacket;
-import java.net.InetSocketAddress;
-import java.net.MulticastSocket;
+import java.net.*;
 import java.util.HashMap;
+import java.util.LinkedList;
 import java.util.Map;
+import java.util.Queue;
+import java.util.zip.CRC32;
 
 public class ReliableChannel implements Channel {
 
     public static int DEFAULT_PORT = 5555;
-    //public int _lastOutgoingSequence = 0;
+    public short _lastOutgoingSequence = 0;
 
     /*
 
@@ -29,7 +33,7 @@ public class ReliableChannel implements Channel {
 
     private boolean running = false;
 
-    private Map<InetSocketAddress, ReliableNode> nodes = new HashMap<>();
+    private Map<String, ReliableNode> nodes = new HashMap<>();
 
 
     /*
@@ -39,6 +43,11 @@ public class ReliableChannel implements Channel {
     @Override
     public void open(View view) {
         this.view = view;
+
+        this.nodes.clear();
+        for (Process member : this.view.getMembers()) {
+            this.nodes.put(member.getId(), new ReliableNode());
+        }
 
         try {
             this.socket = new MulticastSocket(DEFAULT_PORT);
@@ -57,7 +66,6 @@ public class ReliableChannel implements Channel {
 
         while (this.running) {
             DatagramPacket datagram = new DatagramPacket(buf, buf.length);
-            InetSocketAddress sourceAddress = (InetSocketAddress) datagram.getSocketAddress();
 
             // Camada transporte
             // pegar no seqid
@@ -66,7 +74,11 @@ public class ReliableChannel implements Channel {
             try {
                 socket.receive(datagram);
 
+                InetSocketAddress sourceAddress = (InetSocketAddress) datagram.getSocketAddress();
+
                 try (ByteArrayInputStream byteStream = new ByteArrayInputStream(datagram.getData(), 0, datagram.getLength()); DataInputStream stream = new DataInputStream(byteStream)) {
+                    short seqId = stream.readShort();
+
                     byte packetId = stream.readByte();
                     Class<? extends Packet> packetClass = PacketRegistry.getPacketFromId(packetId);
                     if (packetClass == null) {
@@ -79,7 +91,11 @@ public class ReliableChannel implements Channel {
                     // verifiar hash
                     // se nok entao para
 
-                    // ack
+                    if (!(packet instanceof PacketAck)) {
+                        // ack
+                        _send(seqId, new PacketAck(), sourceAddress.getAddress(), false);
+                    }
+
                     this.receive(sourceAddress, packet);
                 } catch(NoSuchMethodException | InstantiationException | IllegalAccessException | InvocationTargetException ex) {
                     ex.printStackTrace();
@@ -108,48 +124,17 @@ public class ReliableChannel implements Channel {
         // runs every seconds
     }
 
-    @Override
-    public void send(Packet packet) {
+    /*
+
+     */
+
+    private DatagramPacket _send(short seqId, Packet packet, InetAddress address, boolean useChecksum) throws IOException {
         try (ByteArrayOutputStream byteStream = new ByteArrayOutputStream(); DataOutputStream stream = new DataOutputStream(byteStream)) {
 
-            // Cabeçalho da camada de transporte
-            /*_lastOutgoingSequence++;
+            // Cabeçalho da camada de transporte;
 
-            // Allocate the memory
-            HeapMemory memory = memoryManager.AllocHeapMemory((uint)payload.Count + 4);
-
-            // Write headers
-            memory.Buffer[0] = HeaderPacker.Pack(MessageType.Data);
-            memory.Buffer[1] = channelId;
-
-            // Write the sequence
-            memory.Buffer[2] = (byte)_lastOutgoingSequence;
-            memory.Buffer[3] = (byte)(_lastOutgoingSequence >> 8);
-
-            // Copy the payload
-            Buffer.BlockCopy(payload.Array, payload.Offset, memory.Buffer, 4, payload.Count);
-
-            // Add the memory to pending
-            _sendSequencer.Set(_lastOutgoingSequence, new PendingOutgoingPacket()
-            {
-                Attempts = 1,
-                LastSent = NetTime.Now,
-                FirstSent = NetTime.Now,
-                Memory = memory,
-                NotificationKey = notificationKey
-            });
-
-            // Allocate pointers
-            HeapPointers pointers = memoryManager.AllocHeapPointers(1);
-
-            // Point the first pointer to the memory
-            pointers.Pointers[0] = memory;
-
-            // Send the message to the router. Tell the router to NOT dealloc the memory as the channel needs it for resend purposes.
-            ChannelRouter.SendMessage(pointers, false, connection, noMerge, memoryManager);
-        }*/
-
-
+            // Write Stream
+            stream.writeShort(seqId);
 
             // Camada de aplicaçao
 
@@ -165,10 +150,32 @@ public class ReliableChannel implements Channel {
 
             byte[] buf = byteStream.toByteArray();
 
-            DatagramPacket datagram = new DatagramPacket(buf, buf.length, view.getSubnetAddress(), DEFAULT_PORT);
+            if (useChecksum) {
+                short checksum = CRC16.get(buf);
+                stream.writeShort(checksum);
+            }
+
+            DatagramPacket datagram = new DatagramPacket(buf, buf.length, address, DEFAULT_PORT);
             socket.send(datagram);
 
-            System.out.println(String.format("Sent packet '%s' with ID %d: %s", packet.getClass().getSimpleName(), packetId, packet.toString()));
+            return datagram;
+        }
+    }
+
+    @Override
+    public void send(Packet packet) {
+        try {
+            //Incrementa sequencia
+            _lastOutgoingSequence++;
+
+            DatagramPacket datagram = _send(_lastOutgoingSequence, packet, view.getSubnetAddress(), true);
+
+            ReliablePacket reliablePacket = new ReliablePacket(_lastOutgoingSequence, (byte) 0, datagram);
+            for (ReliableNode node : this.nodes.values()) {
+                node.outgoingPackets.add(reliablePacket);
+            }
+
+            System.out.println(String.format("Sent packet '%s': %s", packet.getClass().getSimpleName(), packet.toString()));
         } catch(IOException ex) {
             ex.printStackTrace();
         }
@@ -177,6 +184,9 @@ public class ReliableChannel implements Channel {
     @Override
     public void receive(InetSocketAddress source, Packet packet) {
         System.out.println(String.format("Received packet '%s' from '%s:%d': %s.", packet.getClass().getSimpleName(), source.getHostString(), source.getPort(), packet.toString()));
+
+
+
     }
 
     /*
@@ -185,5 +195,26 @@ public class ReliableChannel implements Channel {
 
     public class ReliableNode {
 
+        public Queue<ReliablePacket> outgoingPackets = new LinkedList<>();
+
+    }
+
+    public class ReliablePacket {
+
+        public short seqId;
+
+        public byte attempts;
+
+        public DatagramPacket packet;
+
+        /*
+
+         */
+
+        public ReliablePacket(short seqId, byte attempts, DatagramPacket packet) {
+            this.seqId = seqId;
+            this.attempts = attempts;
+            this.packet = packet;
+        }
     }
 }
