@@ -7,10 +7,7 @@ import pt.rd.udpviewmulticast.structures.View;
 
 import java.io.*;
 import java.lang.reflect.InvocationTargetException;
-import java.net.DatagramPacket;
-import java.net.InetSocketAddress;
-import java.net.MulticastSocket;
-import java.net.SocketAddress;
+import java.net.*;
 
 public class UnreliableChannel implements Channel {
 
@@ -70,6 +67,7 @@ public class UnreliableChannel implements Channel {
                     ex.printStackTrace();
                 }
 
+            } catch(SocketException ignored) {
             } catch(IOException ex) {
                 ex.printStackTrace();
             }

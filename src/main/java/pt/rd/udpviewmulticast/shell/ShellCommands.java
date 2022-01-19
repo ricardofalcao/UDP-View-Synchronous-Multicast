@@ -19,7 +19,7 @@ import java.util.Arrays;
         name = "",
         description = {"Interact with the application"},
         footer = {"", "Press Ctrl-D to exit."},
-        subcommands = {ShellCommands.Network.class, PicocliCommands.ClearScreen.class, CommandLine.HelpCommand.class}
+        subcommands = {PicocliCommands.ClearScreen.class, CommandLine.HelpCommand.class}
 )
 public class ShellCommands implements Runnable {
 
@@ -31,13 +31,13 @@ public class ShellCommands implements Runnable {
 
      */
 
-    @Command(mixinStandardHelpOptions = true, subcommands = {CommandLine.HelpCommand.class},
+    @Command(mixinStandardHelpOptions = true,
             description = "Shows the current node ID")
     public void id() {
         System.out.println(Main.ID.toString());
     }
 
-    @Command(mixinStandardHelpOptions = true, subcommands = {CommandLine.HelpCommand.class},
+    @Command(mixinStandardHelpOptions = true,
             description = "Shows the current node IP")
     public void ip() {
         try {
@@ -47,7 +47,7 @@ public class ShellCommands implements Runnable {
         }
     }
 
-    @Command(mixinStandardHelpOptions = true, subcommands = {CommandLine.HelpCommand.class},
+    @Command(mixinStandardHelpOptions = true,
             description = "Pings an IP")
     public void ping(@CommandLine.Parameters(paramLabel = "IP", description = "The IP to ping.") String ip) {
         try {
@@ -63,60 +63,45 @@ public class ShellCommands implements Runnable {
         }
     }
 
-    @Command(mixinStandardHelpOptions = true, subcommands = {CommandLine.HelpCommand.class},
+    @Command(mixinStandardHelpOptions = true,
             description = "Sends an hello packet")
-    public void hello(@CommandLine.Parameters(paramLabel = "NUM", description = "The NUM to send in the packet.") int num) {
-        PacketHello packet = new PacketHello(num, "Hello World!");
-        Main.CHANNEL.send(packet);
+    public void hello(@CommandLine.Parameters(paramLabel = "NUM", description = "The NUM to send.") int num) {
+        Main.CHANNEL.send(new PacketHello(num, Main.ID.toString()));
     }
 
-    @Command(name = "net", mixinStandardHelpOptions = true, subcommands = {CommandLine.HelpCommand.class},
-            description = "Add and remove network degradations")
-    static class Network implements Runnable {
+    @Command(mixinStandardHelpOptions = true,
+            description = "Sets the network rules")
+    public void net(
+            @CommandLine.Option(names = {"-d", "--device"}, paramLabel = "DEVICE", description = "the network device", defaultValue = "eth0") String device,
+            @CommandLine.Parameters(paramLabel = "RULE", description = {
+                    "the rules",
+                    "delay 100ms      - delays every packet by 100ms",
+                    "loss 50%%         - drops 50%% of the outgoing packets",
+                    "corrupt 10%%      - corrupts 10%% of the outgoing packets",
+                    "duplicate 5%%     - duplicates 5%% of the outgoing packets",
+                    "gap 5 delay 10ms - every 5th packet goes immediately and every other packet to be delayed by 10ms"
+            }) String rule
+    ) {
+        try {
+            System.out.print(String.format("Clearing rules (%s): ", device));
 
-        @CommandLine.Option(names = {"-d", "--device"}, paramLabel = "DEVICE", description = "the network device", defaultValue = "eth0")
-        String device;
-
-        public void run() {
-            System.out.println(new CommandLine(this).getUsageMessage());
-        }
-
-        @Command(mixinStandardHelpOptions = true, subcommands = {CommandLine.HelpCommand.class},
-                description = "Clears the network rules")
-        public void clear() {
-            try {
-                System.out.print(String.format("Clearing rules (%s): ", device));
-
-                int result = NetworkDegrader.clearRules(device);
-                if (result == 0) {
-                    System.out.println("success");
-                } else {
-                    System.out.println(String.format("error (%d)", result));
-                }
-            } catch (IOException | InterruptedException ex) {
-                System.out.println(String.format("error (%s)", ex.getMessage()));
+            int result = NetworkDegrader.clearRules(device);
+            if (result == 0) {
+                System.out.println("success");
+            } else {
+                System.out.println(String.format("error (%d)", result));
             }
-        }
 
-        @Command(mixinStandardHelpOptions = true, subcommands = {CommandLine.HelpCommand.class},
-                description = "Adds a new network rule")
-        public void add(
-                @CommandLine.Parameters(paramLabel = "RULE", description = "the rules") String[] rules
-        ) {
-            for (String rule : rules) {
-                try {
-                    System.out.print(String.format("Adding rule (%s): ", rule));
+            System.out.print(String.format("Adding rule (%s): ", rule));
 
-                    int result = NetworkDegrader.addRule(device, rule);
-                    if (result == 0) {
-                        System.out.println("success");
-                    } else {
-                        System.out.println(String.format("error (%d)", result));
-                    }
-                } catch (IOException | InterruptedException ex) {
-                    System.out.println(String.format("error (%s)", ex.getMessage()));
-                }
+            result = NetworkDegrader.addRule(device, rule);
+            if (result == 0) {
+                System.out.println("success");
+            } else {
+                System.out.println(String.format("error (%d)", result));
             }
+        } catch (IOException | InterruptedException ex) {
+            System.out.println(String.format("error (%s)", ex.getMessage()));
         }
     }
 }

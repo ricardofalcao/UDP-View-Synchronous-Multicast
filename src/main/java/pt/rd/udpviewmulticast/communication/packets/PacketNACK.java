@@ -6,24 +6,22 @@ import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.IOException;
 
-public class PacketAck implements Packet {
+public class PacketNACK implements Packet {
 
     /*
 
      */
 
-    public PacketAck() {}
-
-    /*
-
-     */
+    public PacketNACK() {}
 
     @Override
     public void serialize(DataOutputStream outputStream) throws IOException {
+
     }
 
     @Override
     public void deserialize(DataInputStream inputStream) throws IOException {
+
     }
 
     /*

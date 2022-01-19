@@ -12,8 +12,8 @@ import picocli.CommandLine;
 import picocli.shell.jline3.PicocliCommands;
 import pt.rd.udpviewmulticast.communication.Channel;
 import pt.rd.udpviewmulticast.communication.channels.ReliableChannel;
-import pt.rd.udpviewmulticast.communication.packets.PacketAck;
 import pt.rd.udpviewmulticast.communication.packets.PacketHello;
+import pt.rd.udpviewmulticast.communication.packets.PacketNACK;
 import pt.rd.udpviewmulticast.communication.packets.PacketRegistry;
 import pt.rd.udpviewmulticast.shell.ShellCommands;
 import pt.rd.udpviewmulticast.structures.View;
@@ -37,7 +37,7 @@ public class Main {
      */
 
     public static void main(String[] _args) throws UnknownHostException {
-        PacketRegistry.registerPacket((byte) 99, PacketAck.class);
+        PacketRegistry.registerPacket((byte) 99, PacketNACK.class);
         PacketRegistry.registerPacket((byte) 1, PacketHello.class);
 
         ID = UUID.randomUUID();
