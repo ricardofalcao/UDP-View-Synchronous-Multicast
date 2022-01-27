@@ -1,16 +1,16 @@
 package pt.rd.udpviewmulticast.shell;
 
+import java.io.IOException;
+import java.net.InetAddress;
+import java.net.UnknownHostException;
 import picocli.CommandLine;
 import picocli.CommandLine.Command;
 import picocli.shell.jline3.PicocliCommands;
 import pt.rd.udpviewmulticast.Main;
 import pt.rd.udpviewmulticast.benchmark.NetworkDegrader;
+import pt.rd.udpviewmulticast.communication.channels.ReliableNegChannel;
+import pt.rd.udpviewmulticast.communication.channels.UnreliableChannel;
 import pt.rd.udpviewmulticast.communication.packets.PacketHello;
-
-import java.io.IOException;
-import java.net.InetAddress;
-import java.net.UnknownHostException;
-import java.util.Arrays;
 
 /**
  * Top-level command that just prints help.
@@ -34,7 +34,7 @@ public class ShellCommands implements Runnable {
     @Command(mixinStandardHelpOptions = true,
             description = "Shows the current node ID")
     public void id() {
-        System.out.println(Main.ID.toString());
+        System.out.println(Main.ID);
     }
 
     @Command(mixinStandardHelpOptions = true,
@@ -66,7 +66,11 @@ public class ShellCommands implements Runnable {
     @Command(mixinStandardHelpOptions = true,
             description = "Sends an hello packet")
     public void hello(@CommandLine.Parameters(paramLabel = "NUM", description = "The NUM to send.") int num) {
-        Main.CHANNEL.send(new PacketHello(num, Main.ID.toString()));
+        try {
+            Main.COMMUNICATION.multicastPacket(ReliableNegChannel.class, new PacketHello(num, String.valueOf(Main.ID)));
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
     }
 
     @Command(mixinStandardHelpOptions = true,

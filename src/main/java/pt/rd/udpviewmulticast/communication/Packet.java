@@ -10,5 +10,7 @@ public interface Packet {
 
     void deserialize(DataInputStream inputStream) throws IOException;
 
-
+    default boolean shouldDebug() {
+        return true;
+    }
 }

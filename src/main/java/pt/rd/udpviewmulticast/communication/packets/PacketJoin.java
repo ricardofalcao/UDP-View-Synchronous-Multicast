@@ -1,18 +1,17 @@
 package pt.rd.udpviewmulticast.communication.packets;
 
-import pt.rd.udpviewmulticast.communication.Packet;
-
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.IOException;
+import pt.rd.udpviewmulticast.communication.Packet;
 
-public class PacketNACK implements Packet {
+public class PacketJoin implements Packet {
 
     /*
 
      */
 
-    public PacketNACK() {}
+    public PacketJoin() {}
 
     @Override
     public void serialize(DataOutputStream outputStream) throws IOException {
@@ -29,12 +28,7 @@ public class PacketNACK implements Packet {
      */
 
     @Override
-    public boolean shouldDebug() {
-        return false;
-    }
-
-    @Override
     public String toString() {
-        return "NACK";
+        return "Join";
     }
 }

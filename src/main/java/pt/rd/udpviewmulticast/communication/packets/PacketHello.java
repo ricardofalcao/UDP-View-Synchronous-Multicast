@@ -45,7 +45,7 @@ public class PacketHello implements Packet {
 
     @Override
     public String toString() {
-        return "PacketHello{" +
+        return "Hello{" +
                 "id=" + id +
                 ", text='" + text + '\'' +
                 '}';
