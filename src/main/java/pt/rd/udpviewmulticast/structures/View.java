@@ -4,7 +4,9 @@ import java.net.InetAddress;
 import java.net.UnknownHostException;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 public class View {
 
@@ -26,7 +28,7 @@ public class View {
         this.id = id;
         this.members = Collections.unmodifiableCollection(members);
         this.subnetAddress = InetAddress.getByAddress(new byte[]{
-            (byte) 230, (byte) 0, (byte) id, (byte) 0
+            (byte) 230, (byte) 0, id, (byte) 0
         });
     }
 
@@ -34,7 +36,7 @@ public class View {
 
      */
 
-    public int getId() {
+    public byte getId() {
         return id;
     }
 
@@ -51,14 +53,14 @@ public class View {
      */
 
     public View addMember(InetAddress process) throws UnknownHostException {
-        Collection<InetAddress> newProcesses = Set.copyOf(members);
+        Collection<InetAddress> newProcesses = new HashSet<>(members);
         newProcesses.add(process);
 
         return new View((byte) (this.id + 1), newProcesses);
     }
 
     public View removeMember(InetAddress process) throws UnknownHostException {
-        Collection<InetAddress> newProcesses = Set.copyOf(members);
+        Collection<InetAddress> newProcesses = new HashSet<>(members);
         newProcesses.remove(process);
 
         return new View((byte) (this.id + 1), newProcesses);
@@ -67,4 +69,13 @@ public class View {
     /*
 
      */
+
+    @Override
+    public String toString() {
+        return "View{" +
+            "id=" + id +
+            ", members={" + members.stream().map(InetAddress::getHostAddress).collect(Collectors.joining(", ")) +
+            "}, subnetAddress=" + subnetAddress.getHostAddress() +
+            '}';
+    }
 }

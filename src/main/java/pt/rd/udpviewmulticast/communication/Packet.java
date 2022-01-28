@@ -13,4 +13,8 @@ public interface Packet {
     default boolean shouldDebug() {
         return true;
     }
+
+    default boolean shouldQueue() {
+        return true;
+    }
 }

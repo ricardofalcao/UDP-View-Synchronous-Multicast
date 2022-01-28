@@ -31,4 +31,9 @@ public class PacketJoin implements Packet {
     public String toString() {
         return "Join";
     }
+
+    @Override
+    public boolean shouldQueue() {
+        return false;
+    }
 }

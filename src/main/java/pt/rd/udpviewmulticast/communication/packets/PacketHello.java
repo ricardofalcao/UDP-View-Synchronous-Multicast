@@ -10,17 +10,14 @@ public class PacketHello implements Packet {
 
     private int id;
 
-    private String text;
-
     /*
 
      */
 
     public PacketHello() {}
 
-    public PacketHello(int id, String text) {
+    public PacketHello(int id) {
         this.id = id;
-        this.text = text;
     }
 
     /*
@@ -30,13 +27,11 @@ public class PacketHello implements Packet {
     @Override
     public void serialize(DataOutputStream outputStream) throws IOException {
         outputStream.writeInt(this.id);
-        outputStream.writeUTF(this.text);
     }
 
     @Override
     public void deserialize(DataInputStream inputStream) throws IOException {
         this.id = inputStream.readInt();
-        this.text = inputStream.readUTF();
     }
 
     /*
@@ -47,7 +42,11 @@ public class PacketHello implements Packet {
     public String toString() {
         return "Hello{" +
                 "id=" + id +
-                ", text='" + text + '\'' +
                 '}';
+    }
+
+    @Override
+    public boolean shouldDebug() {
+        return false;
     }
 }

@@ -5,13 +5,13 @@ import java.io.DataOutputStream;
 import java.io.IOException;
 import pt.rd.udpviewmulticast.communication.Packet;
 
-public class PacketLeave implements Packet {
+public class PacketFlush implements Packet {
 
     /*
 
      */
 
-    public PacketLeave() {}
+    public PacketFlush() {}
 
     @Override
     public void serialize(DataOutputStream outputStream) throws IOException {
@@ -29,7 +29,7 @@ public class PacketLeave implements Packet {
 
     @Override
     public String toString() {
-        return "Leave";
+        return "Flush";
     }
 
     @Override

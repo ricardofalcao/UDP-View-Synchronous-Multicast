@@ -3,13 +3,14 @@ package pt.rd.udpviewmulticast.shell;
 import java.io.IOException;
 import java.net.InetAddress;
 import java.net.UnknownHostException;
+import java.util.Map;
 import picocli.CommandLine;
 import picocli.CommandLine.Command;
 import picocli.shell.jline3.PicocliCommands;
 import pt.rd.udpviewmulticast.Main;
 import pt.rd.udpviewmulticast.benchmark.NetworkDegrader;
-import pt.rd.udpviewmulticast.communication.channels.ReliableNegChannel;
-import pt.rd.udpviewmulticast.communication.channels.UnreliableChannel;
+import pt.rd.udpviewmulticast.communication.Communication;
+import pt.rd.udpviewmulticast.communication.node.Node;
 import pt.rd.udpviewmulticast.communication.packets.PacketHello;
 
 /**
@@ -32,18 +33,25 @@ public class ShellCommands implements Runnable {
      */
 
     @Command(mixinStandardHelpOptions = true,
-            description = "Shows the current node ID")
-    public void id() {
-        System.out.println(Main.ID);
-    }
-
-    @Command(mixinStandardHelpOptions = true,
-            description = "Shows the current node IP")
+        description = "Shows the current node IP")
     public void ip() {
         try {
             System.out.println(InetAddress.getLocalHost().getHostAddress());
         } catch (UnknownHostException e) {
             e.printStackTrace();
+        }
+    }
+
+    @Command(mixinStandardHelpOptions = true,
+        description = "Shows system stats")
+    public void stats() {
+        Communication communication = Main.COMMUNICATION;
+        System.out.println(String.format("Last sent sequence: %d", communication.getLastSentSeq()));
+        System.out.println(String.format("Packet loss: %.1f (%d acked in %d) [%d retries]", communication.getPacketLoss() * 100, communication.getPacketsAck(), communication.getPacketsSent(), communication.getRetries()));
+
+        System.out.println("Nodes:");
+        for (Map.Entry<InetAddress, Node> entry : communication.getNodes().entrySet()) {
+            System.out.println(String.format("  %s: %d/%d", entry.getKey().getHostAddress(), entry.getValue().getLastDeliveredSeq(), entry.getValue().getLastReceivedSeq()));
         }
     }
 
@@ -66,10 +74,12 @@ public class ShellCommands implements Runnable {
     @Command(mixinStandardHelpOptions = true,
             description = "Sends an hello packet")
     public void hello(@CommandLine.Parameters(paramLabel = "NUM", description = "The NUM to send.") int num) {
-        try {
-            Main.COMMUNICATION.multicastPacket(ReliableNegChannel.class, new PacketHello(num, String.valueOf(Main.ID)));
-        } catch (IOException e) {
-            e.printStackTrace();
+        for(int i = 0; i < num; i++) {
+            try {
+                Main.COMMUNICATION.multicastPacket(new PacketHello(69 + i));
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
         }
     }
 

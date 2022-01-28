@@ -1,8 +1,9 @@
 package pt.rd.udpviewmulticast.shell;
 
+import com.google.common.collect.Lists;
+import java.net.InetAddress;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.util.ArrayList;
 import java.util.concurrent.Callable;
 import java.util.function.Supplier;
 import org.fusesource.jansi.AnsiConsole;
@@ -22,10 +23,12 @@ import picocli.CommandLine;
 import picocli.shell.jline3.PicocliCommands;
 import pt.rd.udpviewmulticast.Main;
 import pt.rd.udpviewmulticast.communication.Communication;
+import pt.rd.udpviewmulticast.communication.packets.PacketACK;
+import pt.rd.udpviewmulticast.communication.packets.PacketFlush;
 import pt.rd.udpviewmulticast.communication.packets.PacketHello;
 import pt.rd.udpviewmulticast.communication.packets.PacketJoin;
 import pt.rd.udpviewmulticast.communication.packets.PacketLeave;
-import pt.rd.udpviewmulticast.communication.packets.PacketNACK;
+import pt.rd.udpviewmulticast.communication.packets.PacketNewView;
 import pt.rd.udpviewmulticast.communication.packets.PacketRegistry;
 import pt.rd.udpviewmulticast.structures.View;
 
@@ -33,28 +36,34 @@ import pt.rd.udpviewmulticast.structures.View;
     description = "Creates a node in a view multicast group")
 public class CliCommands implements Callable<Integer> {
 
-    @CommandLine.Option(names = {"-id", "--id"}, description = "The node id", required = true)
-    private byte id;
+    @CommandLine.Option(names = {"-l", "--leader"}, description = "Sets the node as the leader")
+    private boolean leader = false;
 
     @Override
     public Integer call() throws Exception {
-        PacketRegistry.registerPacket((byte) 99, PacketNACK.class);
+        PacketRegistry.registerPacket((byte) 99, PacketACK.class);
         PacketRegistry.registerPacket((byte) 1, PacketHello.class);
-        PacketRegistry.registerPacket((byte) 2, PacketHeartbeat.class);
-        PacketRegistry.registerPacket((byte) 3, PacketJoin.class);
-        PacketRegistry.registerPacket((byte) 4, PacketLeave.class);
+        PacketRegistry.registerPacket((byte) 2, PacketJoin.class);
+        PacketRegistry.registerPacket((byte) 3, PacketLeave.class);
+        PacketRegistry.registerPacket((byte) 4, PacketNewView.class);
+        PacketRegistry.registerPacket((byte) 5, PacketNewView.class);
+        PacketRegistry.registerPacket((byte) 6, PacketFlush.class);
 
-        View basicView = new View(
-            (byte) 10,
-            new ArrayList<>()
-        );
-
-        Main.ID = id;
+        Main.LEADER = leader;
 
         Main.COMMUNICATION = new Communication();
         Main.COMMUNICATION.setup();
 
-        Main.COMMUNICATION.join(basicView);
+        if (leader) {
+            View basicView = new View(
+                (byte) 1,
+                Lists.newArrayList(InetAddress.getLocalHost())
+            );
+
+            Main.COMMUNICATION.join(basicView);
+        } else {
+            Main.COMMUNICATION.multicastPacket(Communication.LEADER_SUBNET, new PacketJoin());
+        }
 
         Thread thread = new Thread(() -> {
             Main.COMMUNICATION.listenForPackets();
@@ -64,7 +73,13 @@ public class CliCommands implements Callable<Integer> {
 
         createShell();
 
+        if (!leader) {
+            Main.COMMUNICATION.multicastPacket(Communication.LEADER_SUBNET, new PacketLeave());
+        }
+
         Main.COMMUNICATION.shutdown();
+
+        System.out.println("Bye");
 
         return 0;
     }
