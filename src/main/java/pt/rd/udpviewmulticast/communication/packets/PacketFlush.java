@@ -36,4 +36,9 @@ public class PacketFlush implements Packet {
     public boolean shouldQueue() {
         return false;
     }
+
+    @Override
+    public boolean shouldDebug() {
+        return false;
+    }
 }

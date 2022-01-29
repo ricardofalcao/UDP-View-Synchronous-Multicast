@@ -10,6 +10,7 @@ import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import pt.rd.udpviewmulticast.communication.Packet;
 import pt.rd.udpviewmulticast.structures.View;
+import pt.rd.udpviewmulticast.utils.VClock;
 
 public class SentMessage {
 
@@ -20,6 +21,8 @@ public class SentMessage {
      */
 
     private final short id;
+
+    private final VClock<InetAddress> clock;
 
     private final Packet packet;
 
@@ -33,8 +36,9 @@ public class SentMessage {
 
      */
 
-    public SentMessage(short id, Packet packet) {
+    public SentMessage(short id, VClock<InetAddress> clock, Packet packet) {
         this.id = id;
+        this.clock = clock;
         this.packet = packet;
         this.sentTime = System.nanoTime();
     }
@@ -43,7 +47,7 @@ public class SentMessage {
 
      */
 
-    public void ack(InetAddress address) {
+    public void markAck(InetAddress address) {
         this.acknowledged.add(address);
     }
 
@@ -52,6 +56,18 @@ public class SentMessage {
     }
 
     public boolean isStableIntr(View view, View view2) {
+        if (view == null && view2 == null) {
+            return false;
+        }
+
+        if (view2 == null) {
+            return isStable(view);
+        }
+
+        if (view == null) {
+            return isStable(view2);
+        }
+
         Set<InetAddress> intersection = new HashSet<>(view.getMembers());
         intersection.retainAll(view2.getMembers());
 

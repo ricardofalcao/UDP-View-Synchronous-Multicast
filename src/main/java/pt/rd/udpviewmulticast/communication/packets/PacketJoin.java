@@ -36,4 +36,5 @@ public class PacketJoin implements Packet {
     public boolean shouldQueue() {
         return false;
     }
+
 }

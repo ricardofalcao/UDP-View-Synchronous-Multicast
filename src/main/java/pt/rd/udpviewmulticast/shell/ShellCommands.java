@@ -46,6 +46,7 @@ public class ShellCommands implements Runnable {
         description = "Shows system stats")
     public void stats() {
         Communication communication = Main.COMMUNICATION;
+        System.out.println(String.format("Average RTT: %d ns", communication.getSmoothStabilizeRtt()));
         System.out.println(String.format("Last sent sequence: %d", communication.getLastSentSeq()));
         System.out.println(String.format("Packet loss: %.1f (%d acked in %d) [%d retries]", communication.getPacketLoss() * 100, communication.getPacketsAck(), communication.getPacketsSent(), communication.getRetries()));
 
@@ -60,11 +61,11 @@ public class ShellCommands implements Runnable {
     public void ping(@CommandLine.Parameters(paramLabel = "IP", description = "The IP to ping.") String ip) {
         try {
 
-            long start = System.currentTimeMillis();
+            long start = System.nanoTime();
 
             System.out.print("pinging... ");
             boolean reachable = InetAddress.getByName(ip).isReachable(5000);
-            System.out.println(reachable ? String.format("success (%d ms)", System.currentTimeMillis() - start) : "failed");
+            System.out.println(reachable ? String.format("success (%d ns)", (System.nanoTime() - start)) : "failed");
 
         } catch (IOException e) {
             System.out.println(e.getMessage());

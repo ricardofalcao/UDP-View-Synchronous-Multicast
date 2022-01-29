@@ -1,10 +1,13 @@
 package pt.rd.udpviewmulticast.shell;
 
 import com.google.common.collect.Lists;
+import java.io.IOException;
 import java.net.InetAddress;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.concurrent.Callable;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.function.Supplier;
 import org.fusesource.jansi.AnsiConsole;
 import org.jline.console.SystemRegistry;
@@ -23,6 +26,7 @@ import picocli.CommandLine;
 import picocli.shell.jline3.PicocliCommands;
 import pt.rd.udpviewmulticast.Main;
 import pt.rd.udpviewmulticast.communication.Communication;
+import pt.rd.udpviewmulticast.communication.LeaderCommunication;
 import pt.rd.udpviewmulticast.communication.packets.PacketACK;
 import pt.rd.udpviewmulticast.communication.packets.PacketFlush;
 import pt.rd.udpviewmulticast.communication.packets.PacketHello;
@@ -39,47 +43,73 @@ public class CliCommands implements Callable<Integer> {
     @CommandLine.Option(names = {"-l", "--leader"}, description = "Sets the node as the leader")
     private boolean leader = false;
 
+    @CommandLine.Option(names = {"-n", "--noshell"}, description = "Does not create shell")
+    private boolean shell = true;
+
+    @CommandLine.Option(names = {"-p", "--packets"}, description = "Number of packets per second")
+    private int packets = 100;
+
     @Override
     public Integer call() throws Exception {
-        PacketRegistry.registerPacket((byte) 99, PacketACK.class);
-        PacketRegistry.registerPacket((byte) 1, PacketHello.class);
-        PacketRegistry.registerPacket((byte) 2, PacketJoin.class);
-        PacketRegistry.registerPacket((byte) 3, PacketLeave.class);
-        PacketRegistry.registerPacket((byte) 4, PacketNewView.class);
-        PacketRegistry.registerPacket((byte) 5, PacketNewView.class);
-        PacketRegistry.registerPacket((byte) 6, PacketFlush.class);
-
         Main.LEADER = leader;
 
-        Main.COMMUNICATION = new Communication();
-        Main.COMMUNICATION.setup();
+        Communication.PACKET_FREQUENCY = packets;
+
+        View discoveryView = new View(
+            (byte) 1,
+            Lists.newArrayList(InetAddress.getLocalHost())
+        );
+
+        Communication nodeCommunication = new Communication();
+        nodeCommunication.setup();
+
+        Main.COMMUNICATION = nodeCommunication;
+
+        Communication leaderCommunication = new LeaderCommunication(nodeCommunication);
 
         if (leader) {
-            View basicView = new View(
-                (byte) 1,
+
+            View ownView = new View(
+                (byte) 10,
                 Lists.newArrayList(InetAddress.getLocalHost())
             );
 
-            Main.COMMUNICATION.join(basicView);
+            nodeCommunication.join(ownView);
+
+            leaderCommunication.setup();
+            leaderCommunication.join(discoveryView);
+            new Thread(leaderCommunication::listenForPackets).start();
+
         } else {
-            Main.COMMUNICATION.multicastPacket(Communication.LEADER_SUBNET, new PacketJoin());
+
+            nodeCommunication.join(discoveryView);
+            nodeCommunication.requestJoin();
+
         }
 
-        Thread thread = new Thread(() -> {
-            Main.COMMUNICATION.listenForPackets();
-        });
+        Runtime.getRuntime().addShutdownHook(new Thread(() -> {
+            try  {
+                if (!leader) {
+                    nodeCommunication.requestLeave();
+                }
 
+                nodeCommunication.shutdown();
+                leaderCommunication.shutdown();
+
+                System.out.println("Bye");
+            } catch(IOException ex) {
+                ex.printStackTrace();
+            }
+        }));
+
+        Thread thread = new Thread(nodeCommunication::listenForPackets);
         thread.start();
 
-        createShell();
-
-        if (!leader) {
-            Main.COMMUNICATION.multicastPacket(Communication.LEADER_SUBNET, new PacketLeave());
+        if (shell) {
+            createShell();
+        } else {
+            thread.join();
         }
-
-        Main.COMMUNICATION.shutdown();
-
-        System.out.println("Bye");
 
         return 0;
     }

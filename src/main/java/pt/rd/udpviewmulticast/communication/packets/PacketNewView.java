@@ -29,7 +29,7 @@ public class PacketNewView implements Packet {
         outputStream.writeByte(view.getId());
 
         Collection<InetAddress> members = view.getMembers();
-        outputStream.writeInt(members.size());
+        outputStream.writeByte(members.size());
 
         for (InetAddress member : members) {
             byte[] value = member.getAddress();
@@ -42,7 +42,7 @@ public class PacketNewView implements Packet {
     @Override
     public void deserialize(DataInputStream inputStream) throws IOException {
         byte id = inputStream.readByte();
-        int size = inputStream.readInt();
+        int size = inputStream.readByte();
 
         Collection<InetAddress> members = new HashSet<>(size);
         for (int i = 0; i < size; i++) {
@@ -64,13 +64,18 @@ public class PacketNewView implements Packet {
 
     @Override
     public String toString() {
-        return "PrepareView{" +
+        return "NewView{" +
             "view=" + view +
             '}';
     }
 
     @Override
     public boolean shouldQueue() {
+        return false;
+    }
+
+    @Override
+    public boolean shouldDebug() {
         return false;
     }
 }

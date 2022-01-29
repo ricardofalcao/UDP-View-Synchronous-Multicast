@@ -1,6 +1,5 @@
 package pt.rd.udpviewmulticast.communication;
 
-import com.google.common.base.Suppliers;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.DataInputStream;
@@ -10,14 +9,11 @@ import java.lang.reflect.InvocationTargetException;
 import java.net.DatagramPacket;
 import java.net.InetAddress;
 import java.net.MulticastSocket;
-import java.net.UnknownHostException;
 import java.util.Collection;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.LinkedList;
 import java.util.Map;
 import java.util.Queue;
-import java.util.Set;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
@@ -26,7 +22,6 @@ import java.util.logging.Logger;
 import pt.rd.udpviewmulticast.Main;
 import pt.rd.udpviewmulticast.communication.message.ReceivedMessage;
 import pt.rd.udpviewmulticast.communication.message.SentMessage;
-import pt.rd.udpviewmulticast.communication.message.StatMessage;
 import pt.rd.udpviewmulticast.communication.node.Node;
 import pt.rd.udpviewmulticast.communication.packets.PacketACK;
 import pt.rd.udpviewmulticast.communication.packets.PacketFlush;
@@ -41,89 +36,118 @@ public class Communication {
 
     public static int DEFAULT_PORT = 5555;
 
-    public static InetAddress LEADER_SUBNET;
+    public static long PACKET_FREQUENCY = 100;
 
-    static {
-        try {
-            LEADER_SUBNET = InetAddress.getByAddress(new byte[]{
-                (byte) 230, (byte) 0, (byte) 0, (byte) 0
-            });
-        } catch (UnknownHostException e) {
-            e.printStackTrace();
-        }
+    public static ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(4);
+
+    /*
+
+     */
+
+    protected final Logger logger = Logger.getLogger(this.getClass().getSimpleName());
+
+    /*
+
+     */
+
+    protected MulticastSocket socket;
+
+    protected boolean running = false;
+
+    protected CommunicationState state = CommunicationState.JOINING;
+
+    protected View currentView, pendingView;
+
+    protected ScheduledFuture changeViewTimeout;
+
+    protected long viewStartTime = -1;
+
+    //
+
+    protected Queue<Packet> pendingPackets = new LinkedList<>();
+
+    protected Map<Short, SentMessage> sentPackets = new HashMap<>();
+
+    protected short lastSentSeq = 0;
+
+    //
+
+    protected Map<InetAddress, Node> nodes = new HashMap<>();
+
+    // stats
+
+    protected int stabilizedPacketsAmount = 0;
+
+    protected int sentPacketsAmount = 0;
+
+    protected int retries = 0;
+
+    protected long stabilizeRtt = 0;
+
+    protected long smoothStabilizeRtt = 0;
+
+    //================================================================================
+    // Initialization methods
+    //================================================================================
+
+    protected int bindPort() {
+        return DEFAULT_PORT;
     }
 
-    //
-
-    private static final Logger logger = Logger.getLogger("Communication");
-
-    public static ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(2);
-
-    /*
-
-     */
-
-    private MulticastSocket socket;
-
-    private boolean running = false;
-
-    private CommunicationState state = CommunicationState.JOINING;
-
-    private View currentView, pendingView;
-
-    //
-
-    private Queue<Packet> pendingPackets = new LinkedList<>();
-
-    private Map<Short, SentMessage> sentPackets = new HashMap<>();
-
-    private short lastSentSeq = 0;
-
-    private ScheduledFuture changeViewTimeout;
-
-    //
-
-    private Map<InetAddress, Node> nodes = new HashMap<>();
-
-    //
-
-    private final Set<StatMessage> stabilizedPacketsSeq = new HashSet<>();
-
-    private final Set<StatMessage> sentPacketsSeq = new HashSet<>();
-
-    private int retries = 0;
-
-    /*
-
-     */
-
     public void setup() throws IOException {
-        this.socket = new MulticastSocket(DEFAULT_PORT);
-
-        if (Main.LEADER) {
-            this.socket.joinGroup(LEADER_SUBNET);
-        }
-
+        this.socket = new MulticastSocket(bindPort());
+        this.socket.setReuseAddress(true);
         this.running = true;
 
-        if (!Main.LEADER) {
-            scheduler.scheduleAtFixedRate(() -> {
+        floodPackets();
+    }
+
+    public void floodPackets() {
+        System.out.println("Flooding packets");
+        PacketHello hello = new PacketHello(5);
+
+        scheduler.scheduleAtFixedRate(() -> {
+            if (this.state == CommunicationState.NORMAL) {
                 try {
-                    multicastPacket(new PacketHello(5));
+                    multicastPacket(hello);
                 } catch (IOException e) {
                     e.printStackTrace();
                 }
-            }, (long) (Math.random() * 1000), 1, TimeUnit.MILLISECONDS);
-        }
+            }
+        }, (long) (Math.random() * 1_000_000), 1_000_000 / PACKET_FREQUENCY, TimeUnit.MICROSECONDS);
+
+        scheduler.scheduleAtFixedRate(() -> {
+            try {
+                if (this.state == CommunicationState.NORMAL) {
+                    String message = String.format("%d;%s;%d;%d;%d;%d;%d;%d;%d\n",
+                        System.currentTimeMillis(),
+                        Main.IP,
+                        this.currentView.getId(),
+                        this.currentView.getMembers().size(),
+                        this.getPacketsSent(),
+                        this.getPacketsAck(),
+                        this.retries,
+                        this.stabilizeRtt,
+                        this.getSmoothStabilizeRtt()
+                    );
+
+                    Main.LOG.write(
+                        message
+                    );
+                }
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+        }, 0, 200, TimeUnit.MILLISECONDS);
     }
 
     public void listenForPackets() {
-        byte[] buf = new byte[256];
-        System.out.println(Main.LEADER ? "Started listening for packets as the leader." : "Started listening for packets.");
+        byte[] buf = new byte[508];
+        DatagramPacket datagram = new DatagramPacket(buf, buf.length);
+
+        System.out.println(String.format("Started listening for packets [%d]", socket.getLocalPort()));
 
         while (this.running) {
-            DatagramPacket datagram = new DatagramPacket(buf, buf.length);
-
             try {
                 socket.receive(datagram);
 
@@ -158,15 +182,18 @@ public class Communication {
     public void shutdown() {
         this.running = false;
 
-        scheduler.shutdown();
         SentMessage.scheduler.shutdown();
     }
 
-    /*
-        EVENTS
-     */
+    //================================================================================
+    // Packet events
+    //================================================================================
 
-    private void onSend(InetAddress address, short seq, Packet packet) throws IOException {
+    protected boolean acceptUnknownSources() {
+        return this.state == CommunicationState.JOINING;
+    }
+
+    protected void onSend(InetAddress address, short seq, Packet packet) throws IOException {
         if (packet.shouldDebug()) {
             logger.info(String.format("Sent packet '%d:%s' to '%s'.", seq, packet.toString(), address.getHostAddress()));
         }
@@ -175,7 +202,7 @@ public class Communication {
             return;
         }
 
-        SentMessage message = new SentMessage(seq, packet);
+        SentMessage message = new SentMessage(seq, null, packet);
         if (!this.sentPackets.containsKey(message.getId())) {
             this.sentPackets.put(message.getId(), message);
         }
@@ -194,95 +221,33 @@ public class Communication {
         }, 100, TimeUnit.MILLISECONDS);
     }
 
-    private void onReceive(InetAddress sourceAddress, short seq, Packet packet) throws IOException {
-        if (Main.LEADER) {
-            if (packet instanceof PacketJoin) {
-                this.sendPacket(seq, new PacketACK(), sourceAddress);
-
-                View newView = this.currentView.addMember(sourceAddress);
-
-                this.sendPacket(lastSentSeq++, new PacketNewView(newView), sourceAddress);
-                this.multicastPacket(lastSentSeq, new PacketNewView(newView));
-
-                return;
-            }
-
-            if (packet instanceof PacketLeave) {
-                this.sendPacket(seq, new PacketACK(), sourceAddress);
-
-                View newView = this.currentView.removeMember(sourceAddress);
-
-                this.multicastPacket(new PacketNewView(newView));
-
-                return;
-            }
+    protected void onReceive(InetAddress sourceAddress, short seq, Packet packet) throws IOException {
+        if (packet.shouldDebug()) {
+            logger.info(String.format("Received packet '%d:%s' from '%s'.", seq, packet,
+                sourceAddress.getHostAddress()));
         }
 
         if (packet instanceof PacketACK) {
-            SentMessage message = this.sentPackets.get(seq);
-            if (message == null) {
-                return;
-            }
-
-            message.ack(sourceAddress);
-
-            if (message.getPacket() instanceof PacketJoin || message.getPacket() instanceof PacketNewView || message
-                .getPacket() instanceof PacketLeave) {
-                message.clearTimeout();
-
-                this.sentPackets.remove(seq);
-            } else if (this.state == CommunicationState.NORMAL && message.isStable(this.currentView)) {
-                //logger.info(String.format("Stable message '%d'.", seq));
-                message.clearTimeout();
-
-                this.sentPackets.remove(seq);
-                this.stabilizedPacketsSeq.add(new StatMessage(currentView.getId(), seq));
-            } else if (this.state == CommunicationState.FLUSHING && message.isStableIntr(this.currentView, this.pendingView)) {
-                //logger.info(String.format("Stable message '%d'.", seq));
-                message.clearTimeout();
-
-                this.sentPackets.remove(seq);
-                this.stabilizedPacketsSeq.add(new StatMessage(currentView.getId(), seq));
-            }
-
-            if (this.state == CommunicationState.FLUSHING && this.sentPackets.isEmpty()) {
-                this.state = CommunicationState.FLUSHED;
-
-                checkFlush();
-
-            }
-
+            this.onReceiveACK(sourceAddress, seq, packet);
             return;
         }
 
-        if (currentView == null && packet instanceof PacketNewView) {
-            this.sendPacket(seq, new PacketACK(), sourceAddress);
-
-            PacketNewView newView = (PacketNewView) packet;
-            this.join(newView.getView());
-
-            return;
-        }
+        this.ack(sourceAddress, seq);
 
         Node node = this.nodes.get(sourceAddress);
         if (node == null) {
             //throw new IOException(String.format("Unknown node from ip '%s'", sourceAddress.getHostAddress()));
-            return;
+            if (acceptUnknownSources()) {
+                node = new Node(sourceAddress);
+                this.nodes.put(sourceAddress, node);
+            } else {
+                return;
+            }
+
         }
 
-        this.sendPacket(seq, new PacketACK(), sourceAddress);
-
-        ReceivedMessage message = new ReceivedMessage(sourceAddress, seq, packet);
+        ReceivedMessage message = new ReceivedMessage(sourceAddress, null, seq, packet);
         node.storePacket(message);
-
-        if (message.getPacket().shouldDebug()) {
-            logger.info(String.format("Received packet '%d:%s' from '%s'.", message.getSeq(), message.getPacket(),
-                message.getSourceAddress().getHostAddress()));
-        }
-
-        if (packet instanceof PacketFlush) {
-            System.out.println(String.format("[%d] Flush %d/%d - %s", seq, node.getLastReceivedSeq(), node.getLastReceivedSeq(), node.getAddress().getHostAddress()));
-        }
 
         Collection<ReceivedMessage> deliverable = node.getDeliverablePackets();
         for (ReceivedMessage deliver : deliverable) {
@@ -292,7 +257,45 @@ public class Communication {
         }
     }
 
-    private void onDeliver(ReceivedMessage message) throws IOException {
+    protected void onReceiveACK(InetAddress sourceAddress, short seq, Packet ack) throws IOException {
+        SentMessage message = this.sentPackets.get(seq);
+        if (message == null) {
+            return;
+        }
+
+        message.markAck(sourceAddress);
+
+        if (state == CommunicationState.JOINING) {
+            message.clearTimeout();
+
+            this.sentPackets.remove(seq);
+            return;
+        }
+
+        if (
+            (this.state == CommunicationState.NORMAL && message.isStable(this.currentView)) ||
+                (this.state == CommunicationState.FLUSHING && message.isStableIntr(this.currentView, this.pendingView))
+        ) {
+            message.clearTimeout();
+
+            this.sentPackets.remove(seq);
+            this.stabilizedPacketsAmount++;
+
+            long nanos = System.nanoTime() - message.getSentTime();
+
+            float factor = 0.875f;
+            this.stabilizeRtt = nanos;
+            this.smoothStabilizeRtt = (long) (this.smoothStabilizeRtt * factor + nanos * (1 - factor));
+        }
+
+        if (this.state == CommunicationState.FLUSHING && this.sentPackets.isEmpty()) {
+            this.state = CommunicationState.FLUSHED;
+
+            checkFlush();
+        }
+    }
+
+    protected void onDeliver(ReceivedMessage message) throws IOException {
         Packet packet = message.getPacket();
 
         if (packet.shouldDebug()) {
@@ -305,11 +308,18 @@ public class Communication {
 
             View view = newView.getView();
 
+            if (this.state == CommunicationState.JOINING) {
+                this.join(view);
+                return;
+            }
+
             this.pendingView = view;
             this.state = CommunicationState.FLUSHING;
 
+            this.sentPackets.entrySet().removeIf(entry -> entry.getValue().isStableIntr(this.currentView, this.pendingView));
             logger.info("Sending flush packet. " + this.state);
 
+            this.viewStartTime = System.nanoTime();
             multicastPacket(new PacketFlush());
 
             if (this.changeViewTimeout != null) {
@@ -317,12 +327,14 @@ public class Communication {
             }
 
             this.changeViewTimeout = scheduler.schedule(() -> {
-                /*try {
+                try {
                     this.join(pendingView);
                 } catch (IOException e) {
                     e.printStackTrace();
-                }*/
+                }
             }, 1, TimeUnit.SECONDS);
+
+            return;
         }
 
         if (packet instanceof PacketFlush) {
@@ -331,10 +343,23 @@ public class Communication {
             node.setFlushed(true);
 
             checkFlush();
+            return;
+        }
+
+        if (packet instanceof PacketLeave) {
+            if (Main.LEADER) {
+                View newView = this.currentView.removeMember(message.getSourceAddress());
+                this.multicastPacket(new PacketNewView(newView));
+                return;
+            }
         }
     }
 
-    private void checkFlush() throws IOException {
+    //================================================================================
+    // Flush methods
+    //================================================================================
+
+    protected void checkFlush() throws IOException {
         if (state != CommunicationState.FLUSHED) {
             return;
         }
@@ -357,15 +382,21 @@ public class Communication {
         }
     }
 
-    /*
-
-     */
+    //================================================================================
+    // Membership methods
+    //================================================================================
 
     public void join(View view) throws IOException {
+        if (viewStartTime > 0) {
+            long nanos = System.nanoTime() - viewStartTime;
+            //Main.LOG_FILE.write(String.format("VIEW_CHANGE_NS;%s;%d;%d\n", NetworkDegrader.CURRENT_RULE, view.getMembers().size(), nanos));
+        }
+
         this.leave();
 
         this.currentView = view;
         this.socket.joinGroup(view.getSubnetAddress());
+        this.socket.setLoopbackMode(false);
 
         this.sentPackets.clear();
         this.lastSentSeq = 0;
@@ -376,21 +407,22 @@ public class Communication {
 
         logger.info(String.format("Joined group with ID %d and ip '%s'.", view.getId(), view.getSubnetAddress().getHostAddress()));
 
-        scheduler.schedule(() -> {
-            try {
-                this.state = CommunicationState.NORMAL;
+        this.state = CommunicationState.NORMAL;
 
-                Packet packet;
-                while((packet = this.pendingPackets.poll()) != null) {
-                    multicastPacket(packet);
-                }
-            } catch(IOException ex) {
-                ex.printStackTrace();
+        try {
+            Packet packet;
+            while ((packet = this.pendingPackets.poll()) != null) {
+                multicastPacket(packet);
             }
-        }, 10, TimeUnit.MILLISECONDS);
+        } catch (IOException ex) {
+            ex.printStackTrace();
+        }
+
+        /*scheduler.schedule(() -> {
+        }, 10, TimeUnit.MILLISECONDS);*/
     }
 
-    private void leave() throws IOException {
+    protected void leave() throws IOException {
         if (this.currentView != null) {
             this.socket.leaveGroup(this.currentView.getSubnetAddress());
             this.currentView = null;
@@ -398,13 +430,30 @@ public class Communication {
         }
     }
 
-    /*
+    //
 
-     */
+    public void requestJoin() throws IOException {
+        this.state = CommunicationState.JOINING;
+
+        this.socket.setLoopbackMode(true);
+        this.multicastPacket(new PacketJoin());
+    }
+
+    public void requestLeave() throws IOException {
+        this.socket.setLoopbackMode(true);
+        this.multicastPacket(new PacketLeave());
+    }
+
+    //================================================================================
+    // Packet sending methods
+    //================================================================================
+
+    public int targetPort() {
+        return this.state == CommunicationState.JOINING ? DEFAULT_PORT + 1 : DEFAULT_PORT;
+    }
 
     public void sendPacket(short seq, Packet packet, InetAddress targetAddress) throws IOException {
         if (packet.shouldQueue() && this.state != CommunicationState.NORMAL && this.state != CommunicationState.JOINING) {
-            //System.out.println("add message to queue");
             this.pendingPackets.add(packet);
             return;
         }
@@ -421,14 +470,18 @@ public class Communication {
                 packet.serialize(dataStream);
 
                 byte[] value = byteStream.toByteArray();
-                DatagramPacket datagram = new DatagramPacket(value, value.length, targetAddress, DEFAULT_PORT);
+                DatagramPacket datagram = new DatagramPacket(value, value.length, targetAddress, this.targetPort());
+
+                boolean virgin = !this.sentPackets.containsKey(seq);
 
                 this.onSend(targetAddress, seq, packet);
                 this.socket.send(datagram);
 
                 if (!(packet instanceof PacketACK)) {
                     if (this.state != CommunicationState.JOINING && currentView != null) {
-                        sentPacketsSeq.add(new StatMessage(currentView.getId(), seq));
+                        if (virgin) {
+                            sentPacketsAmount++;
+                        }
                     }
                 }
             }
@@ -460,9 +513,13 @@ public class Communication {
         }
     }
 
-    /*
+    protected void ack(InetAddress targetAddress, short seq) throws IOException {
+        this.multicastPacket(targetAddress, seq, new PacketACK());
+    }
 
-     */
+    //================================================================================
+    // Getters & Setters
+    //================================================================================
 
     public Map<InetAddress, Node> getNodes() {
         return nodes;
@@ -473,11 +530,11 @@ public class Communication {
     }
 
     public int getPacketsSent() {
-        return sentPacketsSeq.size();
+        return sentPacketsAmount;
     }
 
     public int getPacketsAck() {
-        return stabilizedPacketsSeq.size();
+        return stabilizedPacketsAmount;
     }
 
     public float getPacketLoss() {
@@ -486,5 +543,9 @@ public class Communication {
 
     public int getRetries() {
         return retries;
+    }
+
+    public long getSmoothStabilizeRtt() {
+        return smoothStabilizeRtt;
     }
 }

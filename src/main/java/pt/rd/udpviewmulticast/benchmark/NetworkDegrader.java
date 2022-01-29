@@ -5,6 +5,8 @@ import java.util.concurrent.TimeUnit;
 
 public class NetworkDegrader {
 
+    public static String CURRENT_RULE = "";
+
     private static int _run(String command) throws IOException, InterruptedException {
         ProcessBuilder builder = new ProcessBuilder(String.format("tc qdisc %s", command).split(" "));
         //builder.inheritIO();
@@ -19,10 +21,12 @@ public class NetworkDegrader {
      */
 
     public static int addRule(String netInterface, String rule) throws IOException, InterruptedException {
+        CURRENT_RULE = rule;
         return _run(String.format("add dev %s root netem %s", netInterface, rule));
     }
 
     public static int clearRules(String netInterface) throws IOException, InterruptedException {
+        CURRENT_RULE = "";
         return _run(String.format("del dev %s root", netInterface));
     }
 
