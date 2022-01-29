@@ -25,6 +25,8 @@ public class Main {
 
     public static boolean LEADER = false;
 
+    public static String DISTURBANCE = "";
+
     public static Communication COMMUNICATION;
 
     public static CharSink LOG;

@@ -21,6 +21,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import pt.rd.udpviewmulticast.Main;
+import pt.rd.udpviewmulticast.benchmark.NetworkDegrader;
 import pt.rd.udpviewmulticast.communication.message.ReceivedMessage;
 import pt.rd.udpviewmulticast.communication.message.SentMessage;
 import pt.rd.udpviewmulticast.communication.node.Node;
@@ -423,11 +424,15 @@ public class Communication {
         this.state = CommunicationState.NORMAL;
 
         try {
+            if (Main.DISTURBANCE.isEmpty()) {
+                NetworkDegrader.addRule("eth0", Main.DISTURBANCE);
+            }
+
             Packet packet;
             while ((packet = this.pendingPackets.poll()) != null) {
                 multicastPacket(packet);
             }
-        } catch (IOException ex) {
+        } catch (IOException | InterruptedException ex) {
             ex.printStackTrace();
         }
 

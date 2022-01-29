@@ -1,0 +1,25 @@
+@startuml
+skinparam linetype ortho
+skinparam Monochrome true
+skinparam sequenceMessageAlign center
+skinparam defaultFontSize 16
+skinparam defaultFontName CMU Serif
+
+Membro -> Controlador : **join //i//**
+Controlador --> Membro : //ack//
+
+Controlador -> "View //i//" : **new-view //i+1//**
+"View //i//" --> Controlador : //ack//
+
+Controlador -> Membro : **new-view //i+1//**
+Membro --> Controlador : //ack//
+
+hnote over Membro : execução normal
+
+Membro -> Controlador : **leave //i+1//**
+Controlador --> Membro : //ack//
+
+Controlador -> "View //i//" : **new-view //i+2//**
+"View //i//" --> Controlador : //ack//
+
+@enduml

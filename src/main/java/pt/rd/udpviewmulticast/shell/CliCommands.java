@@ -53,12 +53,16 @@ public class CliCommands implements Callable<Integer> {
     @CommandLine.Option(names = {"-p", "--packets"}, description = "Number of packets per second")
     private int packets = 100;
 
-    @CommandLine.Option(names = {"-ll", "--log"}, description = "Log name")
+    @CommandLine.Option(names = {"--log"}, description = "Log name")
     private String log = "";
+
+    @CommandLine.Option(names = {"--net"}, description = "Inject net disturbances")
+    private String net = "";
 
     @Override
     public Integer call() throws Exception {
         Main.LEADER = leader;
+        Main.DISTURBANCE = net;
 
         File file = new File(log.isEmpty() ? "/internal/data.csv" : String.format("/internal/data_%s.csv", log));
         Main.LOG = Files.asCharSink(file, Charsets.UTF_8, FileWriteMode.APPEND);
