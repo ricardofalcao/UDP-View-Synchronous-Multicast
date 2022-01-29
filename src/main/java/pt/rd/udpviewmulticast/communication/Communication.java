@@ -426,7 +426,7 @@ public class Communication {
 
         try {
             if (!Main.DISTURBANCE.isEmpty()) {
-                NetworkDegrader.addRule("eth0", Main.DISTURBANCE);
+                logger.info(String.format("Added degradation '%s': %d", Main.DISTURBANCE, NetworkDegrader.addRule("eth0", Main.DISTURBANCE) == 0 ? "success" : "error"));
             }
 
             Packet packet;
