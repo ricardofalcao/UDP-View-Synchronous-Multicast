@@ -126,10 +126,11 @@ public class Communication {
         scheduler.scheduleAtFixedRate(() -> {
             try {
                 if (this.state == CommunicationState.NORMAL) {
-                    String message = String.format("%d,%s,%d,%d,%d,%d,%d,%d,%d,%d,%d\n",
+                    String message = String.format("%d,%s,%d,%s,%d,%d,%d,%d,%d,%d,%d,%d\n",
                         System.currentTimeMillis(),
                         Main.IP,
                         PACKET_FREQUENCY,
+                        Main.DISTURBANCE,
                         this.currentView.getId(),
                         this.currentView.getMembers().size(),
                         this.lastViewTime,

@@ -67,7 +67,7 @@ public class CliCommands implements Callable<Integer> {
         File file = new File(log.isEmpty() ? "/internal/data.csv" : String.format("/internal/data_%s.csv", log));
         Main.LOG = Files.asCharSink(file, Charsets.UTF_8, FileWriteMode.APPEND);
         if (!file.exists()) {
-            Main.LOG.write("UNIX time,Node IP,Packets,View ID,View members,View change time (ns),Sent packets,Acked packets,Retries,Stabilize Instant RTT (ns),Stabilize Smooth RTT (ns)\n");
+            Main.LOG.write("UNIX time,Node IP,Packets,Degradation,View ID,View members,View change time (ns),Sent packets,Acked packets,Retries,Stabilize Instant RTT (ns),Stabilize Smooth RTT (ns)\n");
         }
 
         Communication.PACKET_FREQUENCY = packets;
