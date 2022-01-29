@@ -16,11 +16,7 @@ docker network create udp-network &> /dev/null
 echo "Building docker image..."
 docker build -t udp-multicast "$SCRIPTPATH"/.. &> /dev/null
 
-echo "Creating leader..."
-RES=$(/bin/bash "${SCRIPTPATH}"/run_headless.sh --leader)
-sleep 2
-
-PIDS=($RES)
+PIDS=()
 
 for i in $(seq $1)
 do
@@ -30,7 +26,7 @@ do
   sleep 1
 done
 
-read -n 1 -s -r -p "Press any key to continue: "
+read -n 1 -s -r -p "Press any key to destroy: "
 echo ""
 
 echo "Destroying containers..."
