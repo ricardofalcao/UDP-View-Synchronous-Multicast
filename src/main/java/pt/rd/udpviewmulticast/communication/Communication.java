@@ -60,8 +60,6 @@ public class Communication {
 
     protected ScheduledFuture changeViewTimeout;
 
-    protected long viewStartTime = -1;
-
     //
 
     protected Queue<Packet> pendingPackets = new LinkedList<>();
@@ -81,6 +79,10 @@ public class Communication {
     protected int sentPacketsAmount = 0;
 
     protected int retries = 0;
+
+    protected long viewStartTime = -1;
+
+    protected long lastViewTime = -1;
 
     protected long stabilizeRtt = 0;
 
@@ -119,17 +121,20 @@ public class Communication {
         scheduler.scheduleAtFixedRate(() -> {
             try {
                 if (this.state == CommunicationState.NORMAL) {
-                    String message = String.format("%d;%s;%d;%d;%d;%d;%d;%d;%d\n",
+                    String message = String.format("%d;%s;%d;%d;%d;%d;%d;%d;%d;%d\n",
                         System.currentTimeMillis(),
                         Main.IP,
                         this.currentView.getId(),
                         this.currentView.getMembers().size(),
+                        this.lastViewTime,
                         this.getPacketsSent(),
                         this.getPacketsAck(),
                         this.retries,
                         this.stabilizeRtt,
                         this.getSmoothStabilizeRtt()
                     );
+
+                    this.lastViewTime = -1;
 
                     Main.LOG.write(
                         message
@@ -319,7 +324,6 @@ public class Communication {
             this.sentPackets.entrySet().removeIf(entry -> entry.getValue().isStableIntr(this.currentView, this.pendingView));
             logger.info("Sending flush packet. " + this.state);
 
-            this.viewStartTime = System.nanoTime();
             multicastPacket(new PacketFlush());
 
             if (this.changeViewTimeout != null) {
@@ -355,6 +359,10 @@ public class Communication {
         }
     }
 
+    public void timerView() {
+        this.viewStartTime = System.nanoTime();
+    }
+
     //================================================================================
     // Flush methods
     //================================================================================
@@ -388,8 +396,8 @@ public class Communication {
 
     public void join(View view) throws IOException {
         if (viewStartTime > 0) {
-            long nanos = System.nanoTime() - viewStartTime;
-            //Main.LOG_FILE.write(String.format("VIEW_CHANGE_NS;%s;%d;%d\n", NetworkDegrader.CURRENT_RULE, view.getMembers().size(), nanos));
+            this.lastViewTime = System.nanoTime() - viewStartTime;
+            this.viewStartTime = -1;
         }
 
         this.leave();

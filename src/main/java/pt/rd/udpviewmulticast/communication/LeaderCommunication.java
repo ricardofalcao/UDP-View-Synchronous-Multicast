@@ -52,6 +52,7 @@ public class LeaderCommunication extends Communication {
 
             nodeCommunication.multicastPacket(new PacketNewView(newView));
             this.multicastPacket(sourceAddress, new PacketNewView(newView));
+            nodeCommunication.timerView();
 
             return;
         }

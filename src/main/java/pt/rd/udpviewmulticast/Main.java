@@ -37,12 +37,6 @@ public class Main {
         String ip = InetAddress.getLocalHost().getHostAddress();
         IP = ip;
 
-        File file = new File("/internal/data.log");
-        LOG = Files.asCharSink(file, Charsets.UTF_8, FileWriteMode.APPEND);
-        if (!file.exists()) {
-            LOG.write("UNIX time;Node IP;View ID;View members;Sent packets;Acked packets;Retries;Stabilize Instant RTT (ns);Stabilize Smooth RTT (ns)\n");
-        }
-
         System.setProperty("java.util.logging.SimpleFormatter.format",
             "%1$tT %3$s %4$s %5$s%6$s%n");
 

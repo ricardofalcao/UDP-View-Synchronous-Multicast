@@ -1,6 +1,10 @@
 package pt.rd.udpviewmulticast.shell;
 
+import com.google.common.base.Charsets;
 import com.google.common.collect.Lists;
+import com.google.common.io.FileWriteMode;
+import com.google.common.io.Files;
+import java.io.File;
 import java.io.IOException;
 import java.net.InetAddress;
 import java.nio.file.Path;
@@ -49,9 +53,18 @@ public class CliCommands implements Callable<Integer> {
     @CommandLine.Option(names = {"-p", "--packets"}, description = "Number of packets per second")
     private int packets = 100;
 
+    @CommandLine.Option(names = {"-ll", "--log"}, description = "Log name")
+    private String log = "";
+
     @Override
     public Integer call() throws Exception {
         Main.LEADER = leader;
+
+        File file = new File(log.isEmpty() ? "/internal/data.log" : String.format("/internal/data_%s.log", log));
+        Main.LOG = Files.asCharSink(file, Charsets.UTF_8, FileWriteMode.APPEND);
+        if (!file.exists()) {
+            Main.LOG.write("UNIX time;Node IP;View ID;View members;View change time (ns);Sent packets;Acked packets;Retries;Stabilize Instant RTT (ns);Stabilize Smooth RTT (ns)\n");
+        }
 
         Communication.PACKET_FREQUENCY = packets;
 
