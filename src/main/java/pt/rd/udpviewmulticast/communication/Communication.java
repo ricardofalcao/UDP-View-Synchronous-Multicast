@@ -18,6 +18,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
+import java.util.logging.Level;
 import java.util.logging.Logger;
 import pt.rd.udpviewmulticast.Main;
 import pt.rd.udpviewmulticast.communication.message.ReceivedMessage;
@@ -45,6 +46,9 @@ public class Communication {
      */
 
     protected final Logger logger = Logger.getLogger(this.getClass().getSimpleName());
+    {
+        logger.setLevel(Level.SEVERE);
+    }
 
     /*
 
