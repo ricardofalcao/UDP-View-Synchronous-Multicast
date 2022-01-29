@@ -425,7 +425,7 @@ public class Communication {
         this.state = CommunicationState.NORMAL;
 
         try {
-            if (Main.DISTURBANCE.isEmpty()) {
+            if (!Main.DISTURBANCE.isEmpty()) {
                 NetworkDegrader.addRule("eth0", Main.DISTURBANCE);
             }
 
