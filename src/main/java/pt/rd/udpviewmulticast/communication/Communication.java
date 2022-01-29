@@ -426,6 +426,7 @@ public class Communication {
 
         try {
             if (!Main.DISTURBANCE.isEmpty()) {
+                NetworkDegrader.clearRules("eth0");
                 System.out.println(String.format("Added degradation '%s': %s", Main.DISTURBANCE, NetworkDegrader.addRule("eth0", Main.DISTURBANCE) == 0 ? "success" : "error"));
             }
 
