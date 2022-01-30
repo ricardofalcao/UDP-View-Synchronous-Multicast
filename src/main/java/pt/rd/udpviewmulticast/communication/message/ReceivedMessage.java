@@ -14,6 +14,8 @@ public class ReceivedMessage implements Comparable<ReceivedMessage> {
 
     private final Packet packet;
 
+    private long receivedTime;
+
     /*
 
      */
@@ -23,6 +25,7 @@ public class ReceivedMessage implements Comparable<ReceivedMessage> {
         this.clock = clock;
         this.seq = seq;
         this.packet = packet;
+        this.receivedTime = System.nanoTime();
     }
 
     /*
@@ -37,8 +40,16 @@ public class ReceivedMessage implements Comparable<ReceivedMessage> {
         return seq;
     }
 
+    public VClock<InetAddress> getClock() {
+        return clock;
+    }
+
     public Packet getPacket() {
         return packet;
+    }
+
+    public long getReceivedTime() {
+        return receivedTime;
     }
 
     /*

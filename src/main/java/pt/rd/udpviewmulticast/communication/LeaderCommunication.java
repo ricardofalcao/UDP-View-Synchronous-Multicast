@@ -38,6 +38,11 @@ public class LeaderCommunication extends Communication {
     }
 
     @Override
+    protected boolean useVClocks() {
+        return false;
+    }
+
+    @Override
     protected void onDeliver(ReceivedMessage message) throws IOException {
         Packet packet = message.getPacket();
         InetAddress sourceAddress = message.getSourceAddress();

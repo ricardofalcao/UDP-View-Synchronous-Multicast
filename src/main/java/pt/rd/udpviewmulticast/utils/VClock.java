@@ -29,7 +29,6 @@ package pt.rd.udpviewmulticast.utils;
 
 import java.util.HashMap;
 import java.util.Map;
-import java.util.TreeMap;
 
 /**
  * This is the vector clock class, which contains a map of id and time. "id" is a string representing the id of the particular clock entry.
@@ -42,6 +41,10 @@ public class VClock<K> {
 
     public VClock() {
         this.clockTree = new HashMap<>();
+    }
+
+    public VClock(int size) {
+        this.clockTree = new HashMap<>(size);
     }
 
     /**
@@ -125,6 +128,10 @@ public class VClock<K> {
         return last;
     }
 
+    public int size() {
+        return this.clockTree.size();
+    }
+
     /**
      * Merges the clock map "vc" with a second clock map "other". This operation directly modifies "vc" and will result in "vc"
      * encapsulating "other". If both maps contain the same specific id, the higher time value will be chosen.
@@ -144,6 +151,10 @@ public class VClock<K> {
                 }
             }
         }
+    }
+
+    public Map<K, Long> getClockTree() {
+        return clockTree;
     }
 
     /**
@@ -168,5 +179,27 @@ public class VClock<K> {
         }
         vcString.append("}");
         return vcString.toString();
+    }
+
+    public boolean isNext(VClock<K> other) {
+        int changes = 0;
+        long maxChange = 0;
+
+        for (Map.Entry<K, Long> clock : other.clockTree.entrySet()) {
+            Long time = this.clockTree.get(clock.getKey());
+
+            if (time == null) {
+                changes++;
+                maxChange = clock.getValue();
+                continue;
+            }
+
+            if (clock.getValue() > time) {
+                changes++;
+                maxChange = Math.max(maxChange, clock.getValue() - time);
+            }
+        }
+
+        return changes == 1 && maxChange == 1;
     }
 }

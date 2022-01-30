@@ -9,6 +9,7 @@ import java.lang.reflect.InvocationTargetException;
 import java.net.DatagramPacket;
 import java.net.InetAddress;
 import java.net.MulticastSocket;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.LinkedList;
@@ -33,6 +34,7 @@ import pt.rd.udpviewmulticast.communication.packets.PacketLeave;
 import pt.rd.udpviewmulticast.communication.packets.PacketNewView;
 import pt.rd.udpviewmulticast.communication.packets.PacketRegistry;
 import pt.rd.udpviewmulticast.structures.View;
+import pt.rd.udpviewmulticast.utils.VClock;
 
 public class Communication {
 
@@ -47,6 +49,7 @@ public class Communication {
      */
 
     protected final Logger logger = Logger.getLogger(this.getClass().getSimpleName());
+
     {
         logger.setLevel(Level.SEVERE);
     }
@@ -73,6 +76,8 @@ public class Communication {
 
     protected short lastSentSeq = 0;
 
+    protected VClock<InetAddress> clock = new VClock<>();
+
     //
 
     protected Map<InetAddress, Node> nodes = new HashMap<>();
@@ -92,6 +97,10 @@ public class Communication {
     protected long stabilizeRtt = 0;
 
     protected long smoothStabilizeRtt = 0;
+
+    protected long deliverDelay = 0;
+
+    protected long smoothDeliverDelay = 0;
 
     //================================================================================
     // Initialization methods
@@ -113,7 +122,7 @@ public class Communication {
         System.out.println("Flooding packets");
         PacketHello hello = new PacketHello(5);
 
-        scheduler.scheduleAtFixedRate(() -> {
+        /*scheduler.scheduleAtFixedRate(() -> {
             if (this.state == CommunicationState.NORMAL) {
                 try {
                     multicastPacket(hello);
@@ -121,14 +130,14 @@ public class Communication {
                     e.printStackTrace();
                 }
             }
-        }, (long) (Math.random() * 1_000_000), 1_000_000 / PACKET_FREQUENCY, TimeUnit.MICROSECONDS);
+        }, (long) (Math.random() * 1_000_000), 1_000_000 / PACKET_FREQUENCY, TimeUnit.MICROSECONDS);*/
 
         scheduler.scheduleAtFixedRate(() -> {
             try {
                 if (this.state == CommunicationState.NORMAL) {
-                    String message = String.format("%d,%s,%d,%s,%d,%d,%d,%d,%d,%d,%d,%d\n",
+                    String message = String.format("%d,%s,%d,%s,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d\n",
                         System.currentTimeMillis(),
-                        Main.IP,
+                        Main.IP.getHostAddress(),
                         PACKET_FREQUENCY,
                         Main.DISTURBANCE,
                         this.currentView.getId(),
@@ -138,8 +147,14 @@ public class Communication {
                         this.getPacketsAck(),
                         this.retries,
                         this.stabilizeRtt,
-                        this.getSmoothStabilizeRtt()
+                        this.getSmoothStabilizeRtt(),
+                        this.deliverDelay,
+                        this.smoothDeliverDelay
                     );
+
+                    if (this.lastViewTime > -1) {
+                        //System.out.println(String.format("Changed view in %d ns", this.lastViewTime));
+                    }
 
                     this.lastViewTime = -1;
 
@@ -168,6 +183,22 @@ public class Communication {
                     try (DataInputStream dataStream = new DataInputStream(byteStream)) {
                         short seq = dataStream.readShort();
 
+                        VClock<InetAddress> vclock = null;
+                        int size = dataStream.readByte();
+
+                        if (size > 0) {
+                            vclock = new VClock<>(size);
+
+                            for (int i = 0; i < size; i++) {
+                                vclock.set(InetAddress.getByAddress(new byte[]{
+                                    dataStream.readByte(),
+                                    dataStream.readByte(),
+                                    dataStream.readByte(),
+                                    dataStream.readByte(),
+                                }), dataStream.readLong());
+                            }
+                        }
+
                         byte packetId = dataStream.readByte();
                         Class<? extends Packet> packetClass = PacketRegistry.getPacketFromId(packetId);
                         if (packetClass == null) {
@@ -178,7 +209,7 @@ public class Communication {
                             Packet packet = packetClass.getDeclaredConstructor().newInstance();
                             packet.deserialize(dataStream);
 
-                            this.onReceive(datagram.getAddress(), seq, packet);
+                            this.onReceive(datagram.getAddress(), seq, vclock, packet);
                         } catch (NoSuchMethodException | InstantiationException | IllegalAccessException | InvocationTargetException ex) {
                             throw new IOException(ex);
                         }
@@ -205,16 +236,21 @@ public class Communication {
         return this.state == CommunicationState.JOINING;
     }
 
-    protected void onSend(InetAddress address, short seq, Packet packet) throws IOException {
+    protected boolean useVClocks() {
+        return false && this.state != CommunicationState.JOINING;
+    }
+
+    protected void onSend(InetAddress address, short seq, VClock<InetAddress> vclock, Packet packet) throws IOException {
         if (packet.shouldDebug()) {
-            logger.info(String.format("Sent packet '%d:%s' to '%s'.", seq, packet.toString(), address.getHostAddress()));
+            logger.info(String.format("Sent packet '%d:%s' to '%s' [%s].", seq, packet.toString(), address.getHostAddress(),
+                useVClocks() ? vclock.toString() : ""));
         }
 
         if (packet instanceof PacketACK) {
             return;
         }
 
-        SentMessage message = new SentMessage(seq, null, packet);
+        SentMessage message = new SentMessage(seq, vclock, packet);
         if (!this.sentPackets.containsKey(message.getId())) {
             this.sentPackets.put(message.getId(), message);
         }
@@ -226,17 +262,17 @@ public class Communication {
                 }
 
                 retries++;
-                sendPacket(seq, packet, address);
+                sendPacket(seq, vclock, packet, address);
             } catch (IOException e) {
                 e.printStackTrace();
             }
         }, 100, TimeUnit.MILLISECONDS);
     }
 
-    protected void onReceive(InetAddress sourceAddress, short seq, Packet packet) throws IOException {
+    protected void onReceive(InetAddress sourceAddress, short seq, VClock<InetAddress> vclock, Packet packet) throws IOException {
         if (packet.shouldDebug()) {
-            logger.info(String.format("Received packet '%d:%s' from '%s'.", seq, packet,
-                sourceAddress.getHostAddress()));
+            logger.info(String.format("Received packet '%d:%s' from '%s' [%s] vs [%s].", seq, packet,
+                sourceAddress.getHostAddress(), useVClocks() ? vclock.toString() : "", clock.toString()));
         }
 
         if (packet instanceof PacketACK) {
@@ -258,14 +294,18 @@ public class Communication {
 
         }
 
-        ReceivedMessage message = new ReceivedMessage(sourceAddress, null, seq, packet);
+        ReceivedMessage message = new ReceivedMessage(sourceAddress, vclock, seq, packet);
         node.storePacket(message);
 
-        Collection<ReceivedMessage> deliverable = node.getDeliverablePackets();
-        for (ReceivedMessage deliver : deliverable) {
-            node.deliverPacket(deliver);
+        Collection<Node> nodes = new ArrayList<>(this.nodes.values());
+        for (Node value : nodes) {
+            Collection<ReceivedMessage> deliverable = value.getDeliverablePackets(useVClocks() ? clock : null);
 
-            this.onDeliver(deliver);
+            for (ReceivedMessage deliver : deliverable) {
+                value.deliverPacket(deliver);
+
+                this.onDeliver(deliver);
+            }
         }
     }
 
@@ -310,6 +350,17 @@ public class Communication {
     protected void onDeliver(ReceivedMessage message) throws IOException {
         Packet packet = message.getPacket();
 
+        if (useVClocks()) {
+            VClock<InetAddress> newClock = message.getClock();
+            this.clock.merge(newClock);
+            this.clock.tick(Main.IP);
+        }
+
+        long nanos = System.nanoTime() - message.getReceivedTime();
+        float factor = 0.875f;
+        this.deliverDelay = nanos;
+        this.smoothDeliverDelay = (long) (this.smoothDeliverDelay * factor + nanos * (1 - factor));
+
         if (packet.shouldDebug()) {
             logger.info(String.format("Delivered packet '%d:%s' from '%s'.", message.getSeq(), message.getPacket(),
                 message.getSourceAddress().getHostAddress()));
@@ -322,6 +373,17 @@ public class Communication {
 
             if (this.state == CommunicationState.JOINING) {
                 this.join(view);
+
+                try {
+                    if (!Main.DISTURBANCE.isEmpty()) {
+                        NetworkDegrader.clearRules("eth0");
+                        System.out.println(String.format("Added degradation '%s': %s", Main.DISTURBANCE,
+                            NetworkDegrader.addRule("eth0", Main.DISTURBANCE) == 0 ? "success" : "error"));
+                    }
+                } catch (IOException | InterruptedException ex) {
+                    ex.printStackTrace();
+                }
+
                 return;
             }
 
@@ -337,13 +399,13 @@ public class Communication {
                 this.changeViewTimeout.cancel(true);
             }
 
-            this.changeViewTimeout = scheduler.schedule(() -> {
+            /*this.changeViewTimeout = scheduler.schedule(() -> {
                 try {
                     this.join(pendingView);
                 } catch (IOException e) {
                     e.printStackTrace();
                 }
-            }, 1, TimeUnit.SECONDS);
+            }, 1, TimeUnit.SECONDS);*/
 
             return;
         }
@@ -425,16 +487,11 @@ public class Communication {
         this.state = CommunicationState.NORMAL;
 
         try {
-            if (!Main.DISTURBANCE.isEmpty()) {
-                NetworkDegrader.clearRules("eth0");
-                System.out.println(String.format("Added degradation '%s': %s", Main.DISTURBANCE, NetworkDegrader.addRule("eth0", Main.DISTURBANCE) == 0 ? "success" : "error"));
-            }
-
             Packet packet;
             while ((packet = this.pendingPackets.poll()) != null) {
                 multicastPacket(packet);
             }
-        } catch (IOException | InterruptedException ex) {
+        } catch (IOException ex) {
             ex.printStackTrace();
         }
 
@@ -472,7 +529,7 @@ public class Communication {
         return this.state == CommunicationState.JOINING ? DEFAULT_PORT + 1 : DEFAULT_PORT;
     }
 
-    public void sendPacket(short seq, Packet packet, InetAddress targetAddress) throws IOException {
+    public void sendPacket(short seq, VClock<InetAddress> vclock, Packet packet, InetAddress targetAddress) throws IOException {
         if (packet.shouldQueue() && this.state != CommunicationState.NORMAL && this.state != CommunicationState.JOINING) {
             this.pendingPackets.add(packet);
             return;
@@ -486,6 +543,23 @@ public class Communication {
         try (ByteArrayOutputStream byteStream = new ByteArrayOutputStream()) {
             try (DataOutputStream dataStream = new DataOutputStream(byteStream)) {
                 dataStream.writeShort(seq);
+
+                if (useVClocks() && vclock != null) {
+                    dataStream.writeByte(vclock.size());
+
+                    for (Map.Entry<InetAddress, Long> entry : vclock.getClockTree().entrySet()) {
+                        byte[] addr = entry.getKey().getAddress();
+                        dataStream.writeByte(addr[0]);
+                        dataStream.writeByte(addr[1]);
+                        dataStream.writeByte(addr[2]);
+                        dataStream.writeByte(addr[3]);
+
+                        dataStream.writeLong(entry.getValue());
+                    }
+                } else {
+                    dataStream.writeByte(0);
+                }
+
                 dataStream.writeByte(packetId);
                 packet.serialize(dataStream);
 
@@ -494,7 +568,7 @@ public class Communication {
 
                 boolean virgin = !this.sentPackets.containsKey(seq);
 
-                this.onSend(targetAddress, seq, packet);
+                this.onSend(targetAddress, seq, vclock, packet);
                 this.socket.send(datagram);
 
                 if (!(packet instanceof PacketACK)) {
@@ -512,19 +586,21 @@ public class Communication {
 
      */
 
-    public void multicastPacket(InetAddress targetAddress, short seq, Packet packet) throws IOException {
-        sendPacket(seq, packet, targetAddress);
+    public void multicastPacket(InetAddress targetAddress, short seq, VClock<InetAddress> vclock, Packet packet) throws IOException {
+        sendPacket(seq, vclock, packet, targetAddress);
     }
 
-    public void multicastPacket(short seq, Packet packet) throws IOException {
+    public void multicastPacket(short seq, VClock<InetAddress> vclock, Packet packet) throws IOException {
         if (this.currentView != null) {
-            multicastPacket(this.currentView.getSubnetAddress(), seq, packet);
+            multicastPacket(this.currentView.getSubnetAddress(), seq, vclock, packet);
         }
     }
 
     public void multicastPacket(InetAddress targetAddress, Packet packet) throws IOException {
         lastSentSeq++;
-        sendPacket(lastSentSeq, packet, targetAddress);
+        clock.tick(Main.IP);
+
+        sendPacket(lastSentSeq, this.clock, packet, targetAddress);
     }
 
     public void multicastPacket(Packet packet) throws IOException {
@@ -534,7 +610,7 @@ public class Communication {
     }
 
     protected void ack(InetAddress targetAddress, short seq) throws IOException {
-        this.multicastPacket(targetAddress, seq, new PacketACK());
+        this.multicastPacket(targetAddress, seq, this.clock, new PacketACK());
     }
 
     //================================================================================

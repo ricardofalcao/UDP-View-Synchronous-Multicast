@@ -6,6 +6,7 @@ import java.util.LinkedHashSet;
 import java.util.Map;
 import java.util.TreeMap;
 import pt.rd.udpviewmulticast.communication.message.ReceivedMessage;
+import pt.rd.udpviewmulticast.utils.VClock;
 
 public class Node {
 
@@ -43,7 +44,7 @@ public class Node {
 
      */
 
-    public Collection<ReceivedMessage> getDeliverablePackets() {
+    public Collection<ReceivedMessage> getDeliverablePackets(VClock<InetAddress> clock) {
         Collection<ReceivedMessage> output = new LinkedHashSet<>();
 
         short lastSeq = lastDeliveredSeq;
@@ -61,6 +62,16 @@ public class Node {
         ReceivedMessage message;
         while((message = this.receivedPackets.get(++lastSeq)) != null) {
             output.add(message);
+        }
+
+        if (clock != null) {
+            output.removeIf((msg) -> {
+                if (msg.getClock() == null) {
+                    return true;
+                }
+
+                return msg.getClock().isNext(clock);
+            });
         }
 
         return output;

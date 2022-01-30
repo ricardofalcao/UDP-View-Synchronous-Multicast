@@ -1,14 +1,9 @@
 package pt.rd.udpviewmulticast;
 
-import com.google.common.base.Charsets;
 import com.google.common.io.CharSink;
-import com.google.common.io.FileWriteMode;
-import com.google.common.io.Files;
-import java.io.File;
 import java.io.IOException;
 import java.net.InetAddress;
 import picocli.CommandLine;
-import pt.rd.udpviewmulticast.benchmark.NetworkDegrader;
 import pt.rd.udpviewmulticast.communication.Communication;
 import pt.rd.udpviewmulticast.communication.packets.PacketACK;
 import pt.rd.udpviewmulticast.communication.packets.PacketFlush;
@@ -21,7 +16,7 @@ import pt.rd.udpviewmulticast.shell.CliCommands;
 
 public class Main {
 
-    public static String IP = "";
+    public static InetAddress IP;
 
     public static boolean LEADER = false;
 
@@ -36,8 +31,8 @@ public class Main {
      */
 
     public static void main(String[] _args) throws IOException, InterruptedException {
-        String ip = InetAddress.getLocalHost().getHostAddress();
-        IP = ip;
+        IP = InetAddress.getLocalHost();
+        String ip = IP.getHostAddress();
 
         System.setProperty("java.util.logging.SimpleFormatter.format",
             "%1$tT %3$s %4$s %5$s%6$s%n");

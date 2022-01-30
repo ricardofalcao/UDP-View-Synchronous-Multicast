@@ -1,4 +1,6 @@
 @startuml
+!pragma teoz true
+
 skinparam linetype ortho
 skinparam Monochrome true
 skinparam sequenceMessageAlign center
@@ -9,10 +11,10 @@ Membro -> Controlador : **join //i//**
 Controlador --> Membro : //ack//
 
 Controlador -> "View //i//" : **new-view //i+1//**
-"View //i//" --> Controlador : //ack//
+& Controlador -> Membro : **new-view //i+1//**
 
-Controlador -> Membro : **new-view //i+1//**
-Membro --> Controlador : //ack//
+"View //i//" --> Controlador : //ack//
+& Membro --> Controlador : //ack//
 
 hnote over Membro : execução normal
 
