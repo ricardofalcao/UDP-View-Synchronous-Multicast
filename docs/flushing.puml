@@ -1,0 +1,36 @@
+@startuml
+!pragma teoz true
+
+skinparam linetype ortho
+skinparam Monochrome true
+skinparam sequenceMessageAlign center
+skinparam defaultFontSize 16
+skinparam defaultFontName CMU Serif
+
+note across
+    Envia pacotes instáveis
+endnote
+
+"Processo 1" -> "Processo 2" : **flush //i//**
+&"Processo 1" -> "Processo 3"
+
+"Processo 2" --> "Processo 1" : //ack//
+&"Processo 3" --> "Processo 1"
+
+"Processo 2" -> "Processo 1" : **flush //i//**
+&"Processo 2" -> "Processo 3"
+
+"Processo 1" --> "Processo 2" : //ack//
+&"Processo 3" --> "Processo 2"
+
+"Processo 3" -> "Processo 2" : **flush //i//**
+&"Processo 3" -> "Processo 1"
+
+"Processo 1" --> "Processo 3" : //ack//
+&"Processo 2" --> "Processo 3"
+
+note across
+    Troca de //view//
+endnote
+
+@enduml

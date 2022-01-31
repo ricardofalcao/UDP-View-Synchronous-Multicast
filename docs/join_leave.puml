@@ -16,7 +16,7 @@ Controlador -> "View //i//" : **new-view //i+1//**
 "View //i//" --> Controlador : //ack//
 & Membro --> Controlador : //ack//
 
-hnote over Membro : execução normal
+note over Membro : execução normal
 
 Membro -> Controlador : **leave //i+1//**
 Controlador --> Membro : //ack//

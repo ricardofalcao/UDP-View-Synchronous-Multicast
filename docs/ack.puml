@@ -1,0 +1,23 @@
+@startuml
+!pragma teoz true
+
+skinparam linetype ortho
+skinparam Monochrome true
+skinparam sequenceMessageAlign center
+skinparam defaultFontSize 16
+skinparam defaultFontName CMU Serif
+
+"Processo 1" -> "Processo 2" : **msg //i//**
+&"Processo 1" ->x "Processo 3"
+
+"Processo 2" --> "Processo 1" : //ack i//
+
+"Processo 1" -> "Processo 3" : **msg //i//**
+& note left "Processo 1"
+Timeout de 50ms
+Reenvia o pacote
+endnote
+
+"Processo 3" --> "Processo 1" : //ack i//
+
+@enduml
